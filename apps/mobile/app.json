@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "ArogyaSetu+",
+    "slug": "arogyasetu-plus",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#00695C"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.arogyasetu.plus"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#00695C"
+      },
+      "package": "com.arogyasetu.plus"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font"
+    ],
+    "scheme": "arogyasetu",
+    "extra": {
+      "eas": {
+        "projectId": "arogyasetu-plus"
+      }
+    }
+  }
+}

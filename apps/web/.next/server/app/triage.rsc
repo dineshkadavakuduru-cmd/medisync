@@ -1,0 +1,17 @@
+2:"$Sreact.fragment"
+3:I[9246,["659","static/chunks/659-8c4cbdc6cd4f476b.js","185","static/chunks/app/layout-c596f2c34abee2c8.js"],"AppLayout",1]
+4:I[8703,[],""]
+5:I[3751,[],""]
+6:I[5685,[],"ClientPageRoot"]
+7:I[9044,["659","static/chunks/659-8c4cbdc6cd4f476b.js","248","static/chunks/app/triage/page-471c9757785a734e.js"],"default",1]
+a:I[1642,[],"OutletBoundary"]
+c:I[1642,[],"MetadataBoundary"]
+e:I[1642,[],"ViewportBoundary"]
+10:I[1395,[],""]
+1:HL["/_next/static/css/640aac831ca2ac75.css","style"]
+0:{"P":null,"b":"1z2mLX58I4ev7_FmjEnaY","p":"","c":["","triage"],"i":false,"f":[[["",{"children":["triage",{"children":["__PAGE__",{}]}]},"$undefined","$undefined",true],["",["$","$2","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/640aac831ca2ac75.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"en","children":["$","body",null,{"className":"min-h-screen bg-[var(--background)]","children":["$","$L3",null,{"children":["$","$L4",null,{"parallelRouterKey":"children","segmentPath":["children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","title",null,{"children":"404: This page could not be found."}],["$","div",null,{"style":{"fontFamily":"system-ui,\"Segoe UI\",Roboto,Helvetica,Arial,sans-serif,\"Apple Color Emoji\",\"Segoe UI Emoji\"","height":"100vh","textAlign":"center","display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center"},"children":["$","div",null,{"children":[["$","style",null,{"dangerouslySetInnerHTML":{"__html":"body{color:#000;background:#fff;margin:0}.next-error-h1{border-right:1px solid rgba(0,0,0,.3)}@media (prefers-color-scheme:dark){body{color:#fff;background:#000}.next-error-h1{border-right:1px solid rgba(255,255,255,.3)}}"}}],["$","h1",null,{"className":"next-error-h1","style":{"display":"inline-block","margin":"0 20px 0 0","padding":"0 23px 0 0","fontSize":24,"fontWeight":500,"verticalAlign":"top","lineHeight":"49px"},"children":"404"}],["$","div",null,{"style":{"display":"inline-block"},"children":["$","h2",null,{"style":{"fontSize":14,"fontWeight":400,"lineHeight":"49px","margin":0},"children":"This page could not be found."}]}]]}]}]],"notFoundStyles":[]}]}]}]}]]}],{"children":["triage",["$","$2","c",{"children":[null,["$","$L4",null,{"parallelRouterKey":"children","segmentPath":["children","triage","children"],"error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$L5",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","notFoundStyles":"$undefined"}]]}],{"children":["__PAGE__",["$","$2","c",{"children":[["$","$L6",null,{"Component":"$7","searchParams":{},"params":{},"promises":["$@8","$@9"]}],null,["$","$La",null,{"children":"$Lb"}]]}],{},null]},null]},null],["$","$2","h",{"children":[null,["$","$2","5-l4CHL5R48xshI2TiRjE",{"children":[["$","$Lc",null,{"children":"$Ld"}],["$","$Le",null,{"children":"$Lf"}],null]}]]}]]],"m":"$undefined","G":"$10","s":false,"S":true}
+9:{}
+8:{}
+f:[["$","meta","0",{"name":"viewport","content":"width=device-width, initial-scale=1"}]]
+d:[["$","meta","0",{"charSet":"utf-8"}],["$","title","1",{"children":"ArogyaSetu+ | District Command Centre"}],["$","meta","2",{"name":"description","content":"Rural Healthcare Platform for SIH 2026"}]]
+b:null
