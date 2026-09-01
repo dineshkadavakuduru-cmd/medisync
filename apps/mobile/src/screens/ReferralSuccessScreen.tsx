@@ -8,7 +8,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { COLORS, TriageSeverity, ReferralStatus } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity, ReferralStatus } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
 

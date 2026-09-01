@@ -19,7 +19,7 @@
       "@/*": [
         "src/*"
       ],
-      "@arogyasetu/shared": [
+      "@medisync/shared": [
         "../../packages/shared/src"
       ]
     }

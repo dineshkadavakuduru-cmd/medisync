@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, StatusBar } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -34,8 +34,8 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <Animated.View style={{ opacity: fadeAnim }}>
-        <Text style={styles.title}>ArogyaSetu+</Text>
-        <Text style={styles.subtitle}>आरोग्यसेतू+</Text>
+        <Text style={styles.title}>MediSync</Text>
+        <Text style={styles.subtitle}>मेडीसिंक</Text>
         <Text style={styles.tagline}>Bridging Rural Healthcare</Text>
       </Animated.View>
       <View style={styles.footer}>

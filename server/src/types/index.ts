@@ -143,6 +143,7 @@ export interface TriageResult {
   affectedSystems: string[];
   vitalSignFlags: string[];
   aiSummary: string;
+  recommendedDiagnostics: string[];
 }
 
 export interface Alert {
@@ -416,4 +417,103 @@ export interface FeedbackSummary {
   topPositiveTags: { tag: string; count: number }[];
   topNegativeTags: { tag: string; count: number }[];
   byFacility: { facilityId: string; facilityName: string; avgRating: number; feedbackCount: number }[];
+}
+
+export type TeleconsultStatus = 'REQUESTED' | 'ACCEPTED' | 'DECLINED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+
+export interface Doctor {
+  id: string;
+  name: string;
+  facilityId: string;
+  specialty: string;
+  languages: string[];
+}
+
+export interface TeleconsultSession {
+  id: string;
+  patientId?: string;
+  patientName: string;
+  fromFacilityId: string;
+  doctorId: string;
+  doctorName: string;
+  referralId?: string;
+  scheduledTime: string;
+  status: TeleconsultStatus;
+  meetingLink: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export type AppointmentStatus = 'BOOKED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
+export type AppointmentType = 'OUTPATIENT' | 'TELECONSULT' | 'DIAGNOSTIC';
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  facilityId: string;
+  facilityName: string;
+  doctorId?: string;
+  doctorName?: string;
+  dateTime: string;
+  type: AppointmentType;
+  status: AppointmentStatus;
+  estimatedWaitMinutes: number;
+  priority: TriageSeverity;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueueEntry {
+  appointmentId: string;
+  patientId: string;
+  patientName: string;
+  facilityId: string;
+  priority: TriageSeverity;
+  checkedInAt: string;
+  position: number;
+  estimatedWaitMinutes: number;
+}
+
+export type DiagnosticStatus = 'ORDERED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type TestFlag = 'NORMAL' | 'ABNORMAL' | 'CRITICAL';
+export type DiagnosticPriority = 'ROUTINE' | 'URGENT' | 'STAT';
+
+export interface TestResult {
+  id: string;
+  testName: string;
+  testCode: string;
+  value: string;
+  unit: string;
+  flag: TestFlag;
+  referenceRange?: string;
+}
+
+export interface DiagnosticOrder {
+  id: string;
+  patientId: string;
+  patientName: string;
+  facilityId: string;
+  facilityName: string;
+  triageId?: string;
+  referralId?: string;
+  tests: string[];
+  priority: DiagnosticPriority;
+  status: DiagnosticStatus;
+  orderedBy: string;
+  results: TestResult[];
+  notes?: string;
+  createdAt: string;
+  completedAt?: string;
+}
+
+export interface FhirMapping {
+  id: string;
+  internalId: string;
+  entityType: string;
+  fhirResourceId: string;
+  fhirResourceType: string;
+  abhaId?: string;
+  createdAt: string;
 }

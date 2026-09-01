@@ -46,7 +46,7 @@ const referralsRoutes: FastifyPluginAsync = async (fastify) => {
       status: ReferralStatus.CREATED,
       reason: body.reason || body.symptoms.join(', '),
       aiTriageSummary: aiSummary,
-      qrCode: `AROGYA-REF-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+      qrCode: `MEDISYNC-REF-${Date.now()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
       createdAt: new Date(),
       updatedAt: new Date(),
     };

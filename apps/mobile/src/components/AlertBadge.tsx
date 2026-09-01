@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface AlertBadgeProps {

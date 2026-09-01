@@ -598,6 +598,50 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* Row 5: Diagnostic Utilization */}
+      <div className="card">
+        <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Diagnostic Utilization</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-4 bg-[var(--card-bg)] rounded-lg border border-[var(--border)]">
+            <div className="text-sm text-[var(--text-secondary)]">Total Orders This Week</div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">24</div>
+            <div className="text-sm text-[var(--success)]">↑ 12% vs last week</div>
+          </div>
+          <div className="p-4 bg-[var(--card-bg)] rounded-lg border border-[var(--border)]">
+            <div className="text-sm text-[var(--text-secondary)]">Completed</div>
+            <div className="text-3xl font-bold text-[var(--text-primary)]">18</div>
+            <div className="text-sm text-[var(--success)]">75% completion rate</div>
+          </div>
+          <div className="p-4 bg-[var(--card-bg)] rounded-lg border border-[var(--border)]">
+            <div className="text-sm text-[var(--text-secondary)]">Pending Results</div>
+            <div className="text-3xl font-bold text-[var(--warning)]">6</div>
+            <div className="text-sm text-[var(--text-secondary)]">Avg 2.3 hrs turnaround</div>
+          </div>
+        </div>
+        <div className="mt-4">
+          <h4 className="text-sm font-medium text-[var(--text-secondary)] mb-3">Top Tests Ordered</h4>
+          <div className="space-y-2">
+            {[
+              { name: 'Malaria RDT', count: 8, pct: 100 },
+              { name: 'Dengue NS1', count: 6, pct: 75 },
+              { name: 'CBC', count: 5, pct: 63 },
+              { name: 'Blood Sugar', count: 3, pct: 38 },
+              { name: 'X-ray Chest', count: 2, pct: 25 },
+            ].map((test) => (
+              <div key={test.name}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-[var(--text-primary)]">{test.name}</span>
+                  <span className="text-[var(--text-secondary)]">{test.count} orders</span>
+                </div>
+                <div className="w-full bg-[var(--card-bg)] rounded-full h-2">
+                  <div className="h-2 rounded-full bg-[var(--info)]" style={{ width: `${test.pct}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

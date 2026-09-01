@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface State {
@@ -27,7 +27,7 @@ export class ErrorBoundary extends React.Component<{ children: React.ReactNode }
   };
 
   handleReport = () => {
-    Linking.openURL('mailto:support@arogyasetu.in?subject=Bug%20Report');
+    Linking.openURL('mailto:support@medisync.in?subject=Bug%20Report');
   };
 
   render() {

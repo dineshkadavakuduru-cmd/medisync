@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   TextInput,
 } from 'react-native';
-import { COLORS, TriageSeverity, ReferralStatus, FacilityType } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity, ReferralStatus, FacilityType } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityIndicator } from '../components/SeverityIndicator';
 

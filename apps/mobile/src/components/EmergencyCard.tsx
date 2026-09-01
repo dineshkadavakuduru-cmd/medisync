@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { Emergency } from '../types/emergency';
 

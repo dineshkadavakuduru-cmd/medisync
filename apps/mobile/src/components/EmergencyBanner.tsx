@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface EmergencyBannerProps {

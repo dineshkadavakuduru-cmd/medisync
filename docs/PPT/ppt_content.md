@@ -1,4 +1,4 @@
-# ArogyaSetu+ — PowerPoint Slide Content
+# MediSync — PowerPoint Slide Content
 
 ---
 
@@ -8,7 +8,7 @@
 
 | Element | Content |
 |---------|---------|
-| **Title** | ArogyaSetu+ (आरोग्यसेतू+) |
+| **Title** | MediSync (मेडीसिंक) |
 | **Subtitle** | AI-Powered Rural Healthcare Platform |
 | **Problem Statement** | PS26133 |
 | **Organization** | [Your Team Name / Institution] |
@@ -71,30 +71,33 @@ District Hospital (Correct diagnosis, 2 weeks later)
 
 ## SLIDE 3: OUR SOLUTION
 
-**Layout:** Central USP highlight, 6 module cards in 2×3 grid below.
+**Layout:** Central USP highlight, 9 module cards in 3×3 grid below.
 
 ### Title
 **One platform. Every facility. Every patient. AI-powered.**
 
-### Core Modules (6 cards with icons)
+### Core Modules (9 cards with icons)
 
 | # | Module | Icon | One-liner |
 |---|--------|------|-----------|
 | 1 | AI Triage & Symptom Checker | 🩺 | ML-powered pre-diagnosis in regional languages |
 | 2 | Emergency SOS & Escalation | 🚨 | Real-time alerts to PHC, CHC, 108, and district |
-| 3 | Telemedicine Bridge | 🩻 | Connect rural patients to specialists via video/audio |
+| 3 | Telemedicine Bridge | 📹 | Connect rural patients to specialists via video/audio |
 | 4 | Digital Health Records | 📋 | Offline-first EMR that syncs when connected |
 | 5 | Facility & Asset Dashboard | 🏥 | Real-time bed, medicine, and equipment tracking |
 | 6 | Voice & Multilingual Access | 🔊 | Voice-first UI in Marathi, Hindi, English |
+| 7 | Appointment & Queue Management | 📅 | Smart scheduling with priority queuing |
+| 8 | Diagnostic Coordination | 🔬 | Lab test ordering with result tracking |
+| 9 | FHIR/ABDM Interoperability | 🔗 | Standards-compliant health records exchange |
 
 ### USP Highlight Box
-> **What makes us different:** We don't just digitize records — we **prevent referrals** through AI triage, **stop patient drop-off** through real-time tracking, and **work offline** where connectivity doesn't.
+> **What makes us different:** We don't just digitize records — we **prevent referrals** through AI triage, **stop patient drop-off** through real-time tracking, **work offline** where connectivity doesn't, **connect patients to specialists** via telemedicine, and **integrate with national standards** (FHIR R4/ABDM) for seamless health data exchange.
 
 ### Architecture Diagram Description (small, bottom)
 ```
 Patient → ASHA Worker → PHC → CHC → District Hospital
                     ↓
-              [ArogyaSetu+ Platform]
+               [MediSync Platform]
                     ↓
         Real-time Monitoring + AI + Analytics
 ```
@@ -157,7 +160,7 @@ Patient → ASHA Worker → PHC → CHC → District Hospital
 
 ### Before vs After
 
-| Metric | Before | After (with ArogyaSetu+) |
+| Metric | Before | After (with MediSync) |
 |--------|--------|--------------------------|
 | Specialist vacancy impact | Unaddressed | AI triage reduces load by 40% |
 | Referral drop-off | 40% | <5% via real-time tracking |
@@ -205,9 +208,9 @@ Patient → ASHA Worker → PHC → CHC → District Hospital
 
 ### Demo Links (placeholders)
 - **Mobile App (APK):** [link to be shared at demo]
-- **Web Dashboard:** https://arogyasetu-plus.vercel.app
-- **Live API Docs:** https://api.arogyasetu-plus.com/docs
-- **GitHub Repository:** https://github.com/arogyasetu-plus
+- **Web Dashboard:** https://medisync-plus.vercel.app
+- **Live API Docs:** https://api.medisync-plus.com/docs
+- **GitHub Repository:** https://github.com/medisync-plus
 
 ### Contact Information
 - **Email:** [team-email@example.com]

@@ -1,4 +1,4 @@
-# ArogyaSetu+ — 5-Minute Demo Walkthrough Script
+# MediSync — 5-Minute Demo Walkthrough Script
 
 **Total Time:** 5:00  
 **Pace:** Moderate, with 2-second pauses between sections  
@@ -10,11 +10,11 @@
 
 **SHOW:**
 - Open laptop / connect to projector
-- Landing page of web dashboard (`https://arogyasetu-plus.vercel.app`)
+- Landing page of web dashboard (`https://medisync-plus.vercel.app`)
 - Click **"Login as ASHA Worker"** (demo credentials pre-filled)
 
 **SAY:**
-> "Namaste! We are ArogyaSetu+, an AI-powered rural healthcare platform solving the rural healthcare crisis in Maharashtra. Let me show you how a day in the life of an ASHA worker changes with our platform."
+> "Namaste! We are MediSync, an AI-powered rural healthcare platform solving the rural healthcare crisis in Maharashtra. Let me show you how a day in the life of an ASHA worker changes with our platform."
 
 **POINT TO:**
 - Dashboard top banner: "Welcome, ASHA Worker — Sangli District"
@@ -61,7 +61,7 @@
 
 ---
 
-## Minute 2:30–3:30 — Facility Dashboard & Real-time
+## Minute 2:30–3:15 — Facility Dashboard & Real-time
 
 **SHOW:**
 - Switch to **"Facility Dashboard"** view (web dashboard)
@@ -80,18 +80,39 @@
 
 ---
 
-## Minute 3:30–4:15 — Analytics & Voice
+## Minute 3:15–3:45 — Teleconsultation & Diagnostics
+
+**SHOW:**
+- Click **"Teleconsult"** module on the web dashboard
+- Show the teleconsultation sessions list with doctor names, patients, status
+- Click **"New Session"** — demonstrate creating a teleconsultation request
+- Switch to **"Diagnostics"** module — show lab orders with test results (NORMAL/ABNORMAL/CRITICAL flags)
+
+**SAY:**
+> "When a patient needs a specialist, our teleconsultation module connects them remotely — no travel needed. The ASHA worker creates a session, the doctor accepts, and they connect via video. Meanwhile, our diagnostic coordination ensures the right lab tests are ordered based on the triage — results flow back digitally with clear flags for abnormal values."
+
+**POINT TO:**
+- Teleconsultation session list with status badges
+- New session creation form (patient, doctor, scheduled time)
+- Diagnostic orders with test results and flag indicators
+- Auto-generated test recommendations from triage
+
+---
+
+## Minute 3:45–4:15 — Analytics & Voice
 
 **SHOW:**
 - Click **"Analytics"** module
 - Charts: Monthly patient trends, referral success rate, disease hotspots map
+- Show the new **Diagnostic Utilization** chart
 - Switch to **"Voice Assistant"** demo on mobile screen (or emulator)
 
 **SAY:**
-> "For administrators, we provide actionable analytics — disease trends, referral success rates, and geographic hotspots on a Maharashtra map. And for the ASHA worker who may not be tech-savvy, our voice-first interface lets her speak symptoms in Marathi and get results without typing a single word."
+> "For administrators, we provide actionable analytics — disease trends, referral success rates, diagnostic utilization, and geographic hotspots on a Maharashtra map. And for the ASHA worker who may not be tech-savvy, our voice-first interface lets her speak symptoms in Marathi and get results without typing a single word."
 
 **POINT TO:**
 - Line chart: "Patient Enrollments — Last 6 Months"
+- Diagnostic Utilization chart with top tests ordered
 - Map heatmap: disease hotspots in Sangli district
 - Voice assistant demo: "नमस्कार, माझी ताप आणि दिवा शारीरिक वेदना आहे" → AI response in Marathi
 
@@ -106,7 +127,7 @@
 - Return to landing page / thank-you screen
 
 **SAY:**
-> "Finally, connectivity is not guaranteed in rural Maharashtra. So we built ArogyaSetu+ offline-first. The ASHA worker can enter data, check records, and even draft emergency alerts without internet. Everything syncs automatically when she's back in range. This is ArogyaSetu+ — one platform, every facility, every patient, AI-powered. Thank you. We welcome your questions."
+> "Finally, connectivity is not guaranteed in rural Maharashtra. So we built MediSync offline-first. The ASHA worker can enter data, check records, and even draft emergency alerts without internet. Everything syncs automatically when she's back in range. This is MediSync — one platform, every facility, every patient, AI-powered. Thank you. We welcome your questions."
 
 **POINT TO:**
 - Offline indicator banner: "You are offline — 3 records queued for sync"
@@ -124,7 +145,8 @@
 | 0:30 | AI Triage | ML-powered, offline, multilingual |
 | 1:30 | Emergency SOS | Real-time alerts, stops drop-off |
 | 2:30 | Facility Dashboard | Real-time facility health |
-| 3:30 | Analytics & Voice | Data-driven planning, voice-first UI |
+| 3:15 | Teleconsultation & Diagnostics | Remote specialist access, lab coordination |
+| 3:45 | Analytics & Voice | Data-driven planning, voice-first UI |
 | 4:15 | Offline & Closing | Offline-first, sync, thank you |
 
 ---

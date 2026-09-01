@@ -7,6 +7,9 @@ import React, { useState, useEffect } from 'react';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: '🏠' },
   { name: 'AI Triage', href: '/triage', icon: '🤖' },
+  { name: 'Teleconsult', href: '/teleconsult', icon: '📹' },
+  { name: 'Appointments', href: '/appointments', icon: '📅' },
+  { name: 'Diagnostics', href: '/diagnostics', icon: '🔬' },
   { name: 'Facilities', href: '/facilities', icon: '🏥' },
   { name: 'Patients', href: '/patients', icon: '👥' },
   { name: 'Analytics', href: '/analytics', icon: '📊' },
@@ -59,7 +62,7 @@ export function Sidebar() {
             <span className="text-white text-xl">🏥</span>
           </div>
           <div>
-            <h1 className="text-lg font-bold text-[var(--color-text-primary)]">ArogyaSetu+</h1>
+            <h1 className="text-lg font-bold text-[var(--color-text-primary)]">MediSync</h1>
             <p className="text-xs text-[var(--color-text-secondary)]">District Command Centre</p>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Facility, FacilityType } from '@arogyasetu/shared';
+import { Facility, FacilityType } from '@medisync/shared';
 import { wsClient, WSMessageType } from '@/lib/websocket';
 import { showToast } from '@/components/common/Toast';
 

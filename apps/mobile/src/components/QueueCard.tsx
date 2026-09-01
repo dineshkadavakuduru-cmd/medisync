@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface QueueCardProps {
@@ -51,7 +51,7 @@ const styles = StyleSheet.create({
     color: COLORS.textOnPrimary,
     fontSize: theme.typography.fontSize['4xl'],
     fontWeight: theme.typography.fontWeight.bold,
-    lineHeight: theme.typography.lineHeight.tight,
+    marginBottom: 2,
   },
   label: {
     color: COLORS.textOnPrimary,

@@ -1,4 +1,4 @@
--- ArogyaSetu+ Seed Data for Pune District Pilot
+-- MediSync Seed Data for Pune District Pilot
 -- Realistic data for development and testing
 
 -- Clear existing data (in order due to foreign keys)

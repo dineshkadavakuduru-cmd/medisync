@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "ArogyaSetu+",
-    "slug": "arogyasetu-plus",
+    "name": "MediSync",
+    "slug": "medisync",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,14 +16,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.arogyasetu.plus"
+      "bundleIdentifier": "com.medisync.app"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#00695C"
       },
-      "package": "com.arogyasetu.plus"
+      "package": "com.medisync.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -31,10 +31,10 @@
     "plugins": [
       "expo-font"
     ],
-    "scheme": "arogyasetu",
+    "scheme": "medisync",
     "extra": {
       "eas": {
-        "projectId": "arogyasetu-plus"
+        "projectId": "medisync"
       }
     }
   }

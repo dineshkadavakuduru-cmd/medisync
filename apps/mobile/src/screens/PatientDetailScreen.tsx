@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
-import { COLORS, Patient as PatientType, HealthRecord, FacilityType } from '@arogyasetu/shared';
+import { COLORS, Patient as PatientType, HealthRecord, FacilityType } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { api } from '../services/api';
@@ -24,6 +24,8 @@ export const PatientDetailScreen: React.FC<{ navigation: any }> = ({ navigation 
   const { t } = useTranslation();
   const [patient, setPatient] = useState<PatientType | null>(null);
   const [records, setRecords] = useState<HealthRecord[]>([]);
+  const [diagnostics, setDiagnostics] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'timeline' | 'diagnostics'>('timeline');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,6 +39,9 @@ export const PatientDetailScreen: React.FC<{ navigation: any }> = ({ navigation 
       setPatient(p.data);
       const r = await api.getPatientRecords('patient-1');
       setRecords(r.data || []);
+      const dx = await fetch('http://localhost:3001/api/diagnostics/orders?patientId=patient-1');
+      const dxData = await dx.json();
+      setDiagnostics(dxData.data || []);
     } catch (e) {
       console.error(e);
     } finally {
@@ -92,30 +97,79 @@ export const PatientDetailScreen: React.FC<{ navigation: any }> = ({ navigation 
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t('patients.healthTimeline')}</Text>
-          <View style={styles.timeline}>
-            {records.map((record) => (
-              <View key={record.id} style={styles.timelineItem}>
-                <View style={[
-                  styles.timelineDot,
-                  { backgroundColor: facilityTypeColors[record.facilityId] || COLORS.primary },
-                ]} />
-                <View style={styles.timelineContent}>
-                  <View style={styles.timelineHeader}>
-                    <Text style={styles.timelineDate}>
-                      {new Date(record.visitDate).toLocaleDateString()}
-                    </Text>
-                    <Text style={styles.timelineDoctor}>{record.doctorName}</Text>
-                  </View>
-                  <Text style={styles.timelineDiagnosis}>{record.diagnosis}</Text>
-                  <Text style={styles.timelinePrescription}>{record.prescription}</Text>
-                </View>
-              </View>
-            ))}
-            {records.length === 0 && (
-              <Text style={styles.noRecords}>{t('common.noData')}</Text>
-            )}
+          <View style={styles.tabRow}>
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'timeline' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('timeline')}
+            >
+              <Text style={[styles.tabText, activeTab === 'timeline' && styles.tabTextActive]}>Health Timeline</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tabButton, activeTab === 'diagnostics' && styles.tabButtonActive]}
+              onPress={() => setActiveTab('diagnostics')}
+            >
+              <Text style={[styles.tabText, activeTab === 'diagnostics' && styles.tabTextActive]}>Diagnostics</Text>
+            </TouchableOpacity>
           </View>
+
+          {activeTab === 'timeline' ? (
+            <View style={styles.timeline}>
+              {records.map((record) => (
+                <View key={record.id} style={styles.timelineItem}>
+                  <View style={[
+                    styles.timelineDot,
+                    { backgroundColor: facilityTypeColors[record.facilityId] || COLORS.primary },
+                  ]} />
+                  <View style={styles.timelineContent}>
+                    <View style={styles.timelineHeader}>
+                      <Text style={styles.timelineDate}>
+                        {new Date(record.visitDate).toLocaleDateString()}
+                      </Text>
+                      <Text style={styles.timelineDoctor}>{record.doctorName}</Text>
+                    </View>
+                    <Text style={styles.timelineDiagnosis}>{record.diagnosis}</Text>
+                    <Text style={styles.timelinePrescription}>{record.prescription}</Text>
+                  </View>
+                </View>
+              ))}
+              {records.length === 0 && (
+                <Text style={styles.noRecords}>{t('common.noData')}</Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.diagnosticsList}>
+              {diagnostics.map((order) => (
+                <View key={order.id} style={styles.diagnosticCard}>
+                  <View style={styles.dxHeader}>
+                    <Text style={styles.dxDate}>{new Date(order.createdAt).toLocaleDateString()}</Text>
+                    <View style={[styles.dxStatusBadge, { backgroundColor: order.status === 'COMPLETED' ? COLORS.success : order.status === 'IN_PROGRESS' ? COLORS.info : COLORS.warning }]}>
+                      <Text style={styles.dxStatusText}>{order.status}</Text>
+                    </View>
+                  </View>
+                  <View style={styles.dxTests}>
+                    {order.tests.map((test: string) => (
+                      <Text key={test} style={styles.dxTest}>{test}</Text>
+                    ))}
+                  </View>
+                  {order.results && order.results.length > 0 && (
+                    <View style={styles.dxResults}>
+                      {order.results.map((result: any) => (
+                        <View key={result.testCode} style={styles.dxResultRow}>
+                          <Text style={styles.dxResultName}>{result.testName}</Text>
+                          <Text style={[styles.dxResultValue, { color: result.flag === 'NORMAL' ? COLORS.success : result.flag === 'CRITICAL' ? COLORS.danger : COLORS.warning }]}>
+                            {result.value} {result.unit}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </View>
+              ))}
+              {diagnostics.length === 0 && (
+                <Text style={styles.noRecords}>No diagnostic orders</Text>
+              )}
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -277,6 +331,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingVertical: theme.spacing.lg,
   },
+  tabRow: { flexDirection: 'row', gap: theme.spacing.xs, marginBottom: theme.spacing.md },
+  tabButton: { flex: 1, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.sm, backgroundColor: COLORS.background, alignItems: 'center', borderWidth: 1, borderColor: COLORS.border },
+  tabButtonActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  tabText: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, fontWeight: '600' },
+  tabTextActive: { color: COLORS.textOnPrimary },
+  diagnosticsList: { gap: theme.spacing.md },
+  diagnosticCard: { backgroundColor: COLORS.background, borderRadius: theme.borderRadius.sm, padding: theme.spacing.md, borderWidth: 1, borderColor: COLORS.border },
+  dxHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm },
+  dxDate: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary },
+  dxStatusBadge: { paddingHorizontal: theme.spacing.sm, paddingVertical: 2, borderRadius: theme.borderRadius.full },
+  dxStatusText: { color: COLORS.textOnPrimary, fontSize: theme.typography.fontSize.xs, fontWeight: '600' },
+  dxTests: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs, marginBottom: theme.spacing.sm },
+  dxTest: { paddingHorizontal: theme.spacing.sm, paddingVertical: 2, backgroundColor: COLORS.surface, borderRadius: theme.borderRadius.full, fontSize: theme.typography.fontSize.xs, color: COLORS.textPrimary },
+  dxResults: { gap: theme.spacing.xs },
+  dxResultRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 },
+  dxResultName: { fontSize: theme.typography.fontSize.sm, color: COLORS.textPrimary },
+  dxResultValue: { fontSize: theme.typography.fontSize.sm, fontWeight: '600' },
   actionsRow: {
     flexDirection: 'row',
     gap: theme.spacing.md,

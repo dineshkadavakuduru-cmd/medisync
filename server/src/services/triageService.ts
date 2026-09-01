@@ -135,6 +135,45 @@ function getAgeRiskMultiplier(age: number): number {
   return 1.0;
 }
 
+const CONDITION_DIAGNOSTICS: Record<string, string[]> = {
+  chest_pain: ['cardiac_marker_panel', 'ecg', 'troponin'],
+  difficulty_breathing: ['chest_xray', 'oxygen_saturation', 'cbg'],
+  high_fever: ['malaria_rdt', 'dengue_ns1', 'blood_sugar', 'cbc'],
+  severe_burns: ['wound_culture', 'cbc'],
+  severe_headache: ['cbg', 'blood_pressure'],
+  unconscious: ['cbg', 'ecg', 'cbc', 'chest_xray'],
+  seizures: ['ecg', 'cbg', 'mri_brain'],
+  severe_abdominal_pain: ['cbc', 'lft', 'kft', 'usg_abdomen'],
+  snakebite: ['cbc', 'pt_inr', 'usg_abdomen'],
+  poisoning: ['cbc', 'lft', 'kft', 'cbg'],
+  pregnancy_complication: ['blood_group', 'cbc', 'urinalysis', 'bp'],
+  high_blood_pressure: ['bp_monitor', 'ecg', 'kft', 'urinalysis'],
+  dehydration: ['cbc', 'cbg', 'kft'],
+  persistent_vomiting: ['cbc', 'lft', 'cbg', 'urinalysis'],
+  mild_diarrhea: ['stool_reaction', 'cbc', 'urinalysis'],
+  skin_rash: ['cbc', 'lft', 'urinalysis'],
+  joint_pain: ['cbc', 'esr', 'uric_acid'],
+  dizziness: ['bp_monitor', 'cbc', 'cbg'],
+  ear_pain: ['ear_swab', 'temperature'],
+  toothache: ['dental_xray', 'cbc'],
+  back_pain: ['cbc', 'usg_abdomen', 'mri_spine'],
+  weight_loss: ['cbc', 'lft', 'kft', 'usg_abdomen'],
+  loss_of_appetite: ['cbc', 'lft', 'cbc_lft_kft'],
+  severe_bleeding: ['cbc', 'pt_inr', 'blood_group'],
+  severe_allergic_reaction: ['cbc', 'ecg', 'tryptase'],
+};
+
+export function getRecommendedDiagnostics(symptoms: string[]): string[] {
+  const recommended = new Set<string>();
+  for (const symptom of symptoms) {
+    const mappedId = mapSymptomToId(symptom);
+    if (mappedId && CONDITION_DIAGNOSTICS[mappedId]) {
+      CONDITION_DIAGNOSTICS[mappedId].forEach((d) => recommended.add(d));
+    }
+  }
+  return Array.from(recommended);
+}
+
 function getSystemLabel(system: string): string {
   const labels: Record<string, string> = {
     cardiac: 'Cardiac',
@@ -211,6 +250,7 @@ export function assessTriage(
     affectedSystems: Array.from(affectedSystems).map(getSystemLabel),
     vitalSignFlags: vitalAssessment.flags,
     aiSummary: '',
+    recommendedDiagnostics: getRecommendedDiagnostics(symptoms),
   };
 }
 

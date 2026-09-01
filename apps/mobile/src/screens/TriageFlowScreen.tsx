@@ -9,7 +9,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { COLORS, TriageSeverity, FacilityType } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity, FacilityType } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { api } from '../services/api';

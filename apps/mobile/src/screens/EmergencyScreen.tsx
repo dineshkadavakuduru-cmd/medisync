@@ -12,7 +12,7 @@ import {
   Dimensions,
   Linking,
 } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { EmergencyBanner } from '../components/EmergencyBanner';
 import { EmergencyCard } from '../components/EmergencyCard';
@@ -22,6 +22,7 @@ import { isDemoActive } from '../services/demoMode';
 
 interface Emergency {
   id: string;
+  patientId?: string;
   patientName: string;
   patientAge: number;
   patientGender: string;
@@ -77,6 +78,46 @@ export const EmergencyScreen: React.FC = () => {
       }
     } catch (e) {
       console.error(e);
+      setEmergencies([
+        {
+          id: 'e1',
+          patientId: 'p3',
+          patientName: 'Baby of Sunita',
+          patientAge: 2,
+          patientGender: 'FEMALE',
+          condition: 'Severe Dehydration',
+          description: 'Vomiting and loose motion since morning',
+          protocolLevel: 'LEVEL_2',
+          status: 'AMBULANCE_EN_ROUTE',
+          originFacilityId: 'f1',
+          createdAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+          initiatedBy: 'ashha-worker-1',
+          timeline: [
+            { id: 't1', timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString(), event: 'Emergency Initiated', description: 'ASHA reported severe dehydration', automated: false },
+            { id: 't2', timestamp: new Date(Date.now() - 25 * 60 * 1000).toISOString(), event: 'Ambulance Dispatched', description: 'Ambulance A1 dispatched from PHC', automated: true },
+          ],
+          firstAidSteps: ['Keep baby hydrated with ORS', 'Do not give solid food', 'Keep warm and monitor breathing'],
+        },
+        {
+          id: 'e2',
+          patientId: 'p2',
+          patientName: 'Ramesh Pawar',
+          patientAge: 55,
+          patientGender: 'MALE',
+          condition: 'Chest Pain',
+          description: 'Severe chest pain radiating to left arm',
+          protocolLevel: 'LEVEL_1',
+          status: 'ACKNOWLEDGED',
+          originFacilityId: 'f2',
+          createdAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
+          initiatedBy: 'doctor-2',
+          timeline: [
+            { id: 't3', timestamp: new Date(Date.now() - 10 * 60 * 1000).toISOString(), event: 'Emergency Initiated', description: 'Doctor reported chest pain', automated: false },
+            { id: 't4', timestamp: new Date(Date.now() - 8 * 60 * 1000).toISOString(), event: 'Acknowledged', description: 'District Hospital acknowledged', automated: true },
+          ],
+          firstAidSteps: ['Have patient sit down and rest', 'Loosen tight clothing', 'Monitor vitals until ambulance arrives'],
+        },
+      ]);
     } finally {
       setLoading(false);
     }
@@ -240,20 +281,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.xs,
   },
   headerTitle: {
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
     color: COLORS.emergency,
+    flex: 1,
   },
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
+    backgroundColor: '#FFCDD2',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
     borderRadius: theme.borderRadius.full,
+    gap: 6,
   },
   pulsingDot: {
     width: 10,
@@ -262,9 +305,9 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.emergency,
   },
   activeText: {
+    fontSize: theme.typography.fontSize.xs,
     color: COLORS.emergency,
-    fontSize: theme.typography.fontSize.sm,
-    fontWeight: theme.typography.fontWeight.bold,
+    fontWeight: '700',
   },
   subtitle: {
     fontSize: theme.typography.fontSize.sm,

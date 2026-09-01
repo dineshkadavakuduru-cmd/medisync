@@ -6,7 +6,7 @@ module.exports = function (api) {
       'react-native-reanimated/plugin',
       ['module-resolver', {
         alias: {
-          '@arogyasetu/shared': '../../packages/shared/src',
+          '@medisync/shared': '../../packages/shared/src',
         },
       }],
     ],

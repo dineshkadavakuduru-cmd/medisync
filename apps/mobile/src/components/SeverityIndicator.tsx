@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS, TriageSeverity } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface SeverityIndicatorProps {

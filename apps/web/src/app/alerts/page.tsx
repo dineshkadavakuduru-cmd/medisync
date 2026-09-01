@@ -10,7 +10,7 @@ import {
   EmergencyStats,
   EmergencyProtocolLevel,
   EmergencyStatus,
-} from '@arogyasetu/shared';
+} from '@medisync/shared';
 
 const LEVEL_COLORS: Record<EmergencyProtocolLevel, string> = {
   LEVEL_1: '#C62828',

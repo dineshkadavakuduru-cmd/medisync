@@ -10,9 +10,10 @@ import {
   Linking,
   Animated,
 } from 'react-native';
-import { COLORS, FacilityType } from '@arogyasetu/shared';
+import { useNavigation } from '@react-navigation/native';
+import { COLORS, FacilityType } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { api } from '../services/api';
+import { api, MOCK_FACILITIES } from '../services/api';
 import { wsClient } from '../services/websocket';
 import { useTranslation } from '../i18n';
 
@@ -53,7 +54,8 @@ const FACILITY_TYPE_LABELS: Record<FacilityType, string> = {
 
 export const FacilityScreen: React.FC = () => {
   const { t } = useTranslation();
-  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const navigation = useNavigation<any>();
+  const [facilities, setFacilities] = useState<Facility[]>(MOCK_FACILITIES);
   const [districtSummary, setDistrictSummary] = useState<DistrictSummary | null>(null);
   const [filterType, setFilterType] = useState<FacilityType | 'ALL'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
@@ -64,25 +66,12 @@ export const FacilityScreen: React.FC = () => {
 
   const loadData = useCallback(async () => {
     try {
+      setLoading(true);
       const facRes = await api.getFacilities();
-      const facList = (facRes.data || []) as Facility[];
+      const facList = (facRes.data || MOCK_FACILITIES) as Facility[];
       setFacilities(facList);
-      setError(false);
-
-      const analyticsRes = await api.getAnalyticsFacilities();
-      if (analyticsRes.success && analyticsRes.data) {
-        const ds = analyticsRes.data.districtSummary;
-        setDistrictSummary({
-          totalBeds: ds.totalBeds,
-          availableBeds: ds.availableBeds,
-          avgMedicineAvailability: ds.avgMedicineAvailability,
-          totalStaffOnDuty: ds.totalStaffOnDuty,
-          facilitiesWithCriticalStock: ds.facilitiesWithCriticalStock,
-        });
-      }
     } catch (e) {
-      console.error(e);
-      setError(true);
+      setFacilities(MOCK_FACILITIES);
     } finally {
       setLoading(false);
     }
@@ -139,7 +128,7 @@ export const FacilityScreen: React.FC = () => {
 
     return (
       <TouchableOpacity
-        onPress={() => {}}
+        onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id })}
         style={[
           styles.card,
           hasCritical && { borderTopColor: COLORS.severityRed, borderTopWidth: 3 },
@@ -235,15 +224,23 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
   headerTitle: { fontSize: theme.typography.fontSize['2xl'], fontWeight: theme.typography.fontWeight.bold, color: COLORS.textPrimary },
-  filterScroll: { paddingHorizontal: theme.layout.screenPadding, marginBottom: theme.spacing.sm },
+  filterScroll: {
+    flexGrow: 0,
+    height: 42,
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: theme.layout.screenPadding,
+  },
   filterChip: {
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
+    paddingVertical: 8,
     borderRadius: theme.borderRadius.full,
     backgroundColor: COLORS.surface,
     marginRight: theme.spacing.sm,
     borderWidth: 1,
     borderColor: COLORS.border,
+    height: 36,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   filterChipText: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, fontWeight: '500' },

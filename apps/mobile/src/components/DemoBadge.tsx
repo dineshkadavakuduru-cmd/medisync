@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { initDemoMode, isDemoActive as checkDemoActive } from '../services/demoMode';
 
 export const DemoBadge: React.FC = () => {

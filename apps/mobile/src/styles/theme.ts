@@ -1,4 +1,4 @@
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 
 export const theme = {
   colors: COLORS,
@@ -22,9 +22,9 @@ export const theme = {
       bold: '700',
     } as const,
     lineHeight: {
-      tight: 1.2,
-      normal: 1.5,
-      relaxed: 1.75,
+      tight: 36,
+      normal: 24,
+      relaxed: 28,
     },
   },
 

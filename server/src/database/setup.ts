@@ -7,7 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = join(__filename, '..');
 
 async function setupDatabase() {
-  const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/arogyasetu';
+  const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/medisync';
   
   console.log('Connecting to database...');
   const sql = postgres(databaseUrl, { max: 1 });

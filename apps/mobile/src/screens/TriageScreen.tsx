@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from 'react-native';
-import { COLORS, TriageSeverity } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { useNavigation } from '@react-navigation/native';

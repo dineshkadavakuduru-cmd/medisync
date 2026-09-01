@@ -1,4 +1,4 @@
-import { WSMessageType, WSMessage } from '@arogyasetu/shared';
+import { WSMessageType, WSMessage } from '@medisync/shared';
 
 export type { WSMessageType };
 

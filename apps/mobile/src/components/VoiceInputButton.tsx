@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { View, Text, Modal, TouchableOpacity, Animated, StyleSheet } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface VoiceInputButtonProps {

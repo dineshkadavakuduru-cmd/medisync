@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS, AlertPriority } from '@arogyasetu/shared';
+import { COLORS, AlertPriority } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface Alert {

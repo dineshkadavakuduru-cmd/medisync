@@ -1,6 +1,6 @@
-# ArogyaSetu+ (आरोग्यसेतू+)
+# MediSync (मेडीसिंक)
 
-ArogyaSetu+ is a comprehensive telehealth and patient management platform connecting ASHA workers, doctors, and patients across rural India, starting with Pune district.
+MediSync is a comprehensive telehealth and patient management platform connecting ASHA workers, doctors, and patients across rural India, starting with Pune district.
 
 ## One-line Description
 
@@ -93,7 +93,7 @@ Web app runs on http://localhost:3000
 
 ```
 PORT=3001
-DATABASE_URL=postgresql://user:password@localhost:5432/arogyasetu
+DATABASE_URL=postgresql://user:password@localhost:5432/medisync
 ```
 
 ### Mobile (.env)
@@ -130,4 +130,4 @@ npm run lint:all
 
 ## Team
 
-ArogyaSetu+ Development Team
+MediSync Development Team

@@ -17,6 +17,10 @@ import { EmergencyDetailScreen } from '../screens/EmergencyDetailScreen';
 import { FeedbackScreen } from '../screens/FeedbackScreen';
 import { SplashScreen } from '../screens/SplashScreen';
 import { OnboardingScreen } from '../screens/OnboardingScreen';
+import { TeleconsultListScreen } from '../screens/TeleconsultListScreen';
+import { TeleconsultJoinScreen } from '../screens/TeleconsultJoinScreen';
+import { AppointmentBookScreen } from '../screens/AppointmentBookScreen';
+import { QueueScreen } from '../screens/QueueScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -55,6 +59,10 @@ export const AppNavigator: React.FC = () => {
           }}
         />
         <Stack.Screen name="EmergencyDetail" component={EmergencyDetailScreen} options={{ title: 'Emergency Detail' }} />
+        <Stack.Screen name="TeleconsultList" component={TeleconsultListScreen} options={{ title: 'Teleconsultations' }} />
+        <Stack.Screen name="TeleconsultJoin" component={TeleconsultJoinScreen} options={{ title: 'Teleconsultation' }} />
+        <Stack.Screen name="AppointmentBook" component={AppointmentBookScreen} options={{ title: 'Book Appointment' }} />
+        <Stack.Screen name="Queue" component={QueueScreen} options={{ title: 'Facility Queue' }} />
         <Stack.Screen
           name="Feedback"
           component={FeedbackScreen}

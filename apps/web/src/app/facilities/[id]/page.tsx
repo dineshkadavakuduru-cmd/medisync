@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { FacilityType, MedicineItemStatus, StaffRole } from '@arogyasetu/shared';
+import { FacilityType, MedicineItemStatus, StaffRole } from '@medisync/shared';
 import { wsClient, WSMessageType } from '@/lib/websocket';
 import { showToast } from '@/components/common/Toast';
 

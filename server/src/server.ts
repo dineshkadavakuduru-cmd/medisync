@@ -9,6 +9,10 @@ import referralsRoutes from './routes/referrals.js';
 import alertsRoutes from './routes/alerts.js';
 import analyticsRoutes from './routes/analytics.js';
 import emergenciesRoutes from './routes/emergencies.js';
+import teleconsultRoutes from './routes/teleconsult.js';
+import appointmentsRoutes from './routes/appointments.js';
+import diagnosticsRoutes from './routes/diagnostics.js';
+import fhirRoutes from './routes/fhir.js';
 import { registerWebSocket } from './websocket/realtime.js';
 import { startSimulator } from './services/simulator.js';
 
@@ -33,11 +37,15 @@ async function start() {
     await fastify.register(alertsRoutes);
     await fastify.register(analyticsRoutes);
     await fastify.register(emergenciesRoutes);
+    await fastify.register(teleconsultRoutes);
+    await fastify.register(appointmentsRoutes);
+    await fastify.register(diagnosticsRoutes);
+    await fastify.register(fhirRoutes);
 
     fastify.get('/', async () => {
       return {
         status: 'ok',
-        name: 'ArogyaSetu+ API',
+        name: 'MediSync API',
         version: '1.0.0',
       };
     });
@@ -46,7 +54,7 @@ async function start() {
 
     await fastify.listen({ port, host: '0.0.0.0' });
 
-    console.log(`ArogyaSetu+ API server running on port ${port}`);
+    console.log(`MediSync API server running on port ${port}`);
     startSimulator();
   } catch (err) {
     fastify.log.error(err);

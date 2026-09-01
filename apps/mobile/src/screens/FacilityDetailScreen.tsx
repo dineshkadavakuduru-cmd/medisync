@@ -12,7 +12,7 @@ import {
   Animated,
 } from 'react-native';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { COLORS, FacilityType, MedicineItemStatus } from '@arogyasetu/shared';
+import { COLORS, FacilityType, MedicineItemStatus } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
 import { wsClient, WSMessageType } from '../services/websocket';

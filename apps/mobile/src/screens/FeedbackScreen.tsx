@@ -9,7 +9,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
 import { useTranslation } from '../i18n';

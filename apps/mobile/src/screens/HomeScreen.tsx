@@ -9,26 +9,42 @@ import {
   RefreshControl,
   Animated,
   Dimensions,
+  Modal,
 } from 'react-native';
-import { COLORS, TriageSeverity, Alert } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity, Alert } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { EmergencyBanner } from '../components/EmergencyBanner';
 import { StatCard } from '../components/StatCard';
 import { QueueCard } from '../components/QueueCard';
 import { AlertCard } from '../components/AlertCard';
 import { ReferralCard } from '../components/ReferralCard';
-import { api } from '../services/api';
+import { api, MOCK_ACTIVE_REFERRALS, MOCK_ALERTS } from '../services/api';
 import { useApi } from '../hooks/useApi';
 import { useTranslation } from '../i18n';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useCountUp } from '../hooks/useCountUp';
 import { isDemoActive, toggleDemoMode } from '../services/demoMode';
 
+const DEFAULT_STATS = {
+  todaysReferrals: 14,
+  referralTrend: 3,
+  medicineAvailability: 82,
+  patientsWaiting: 8,
+  pendingHighRiskAlerts: 2,
+  totalPatients: 248,
+  facilitiesActive: 10,
+  avgResponseTimeMinutes: 12,
+  referralCompletionRate: 87,
+  topConditions: ['Fever', 'Respiratory', 'Gastroenteritis'],
+};
+
 export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
   const { data, loading, refetch } = useApi(() => api.getDashboardStats());
   const { data: alertsData, refetch: refetchAlerts } = useApi(() => api.getAlerts());
   const { data: referralsData } = useApi(() => api.getActiveReferrals());
+
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const sosScale = useRef(new Animated.Value(1)).current;
@@ -87,23 +103,12 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     return () => pulse.stop();
   }, [sosScale]);
 
-  const stats = data || {
-    todaysReferrals: 0,
-    referralTrend: 0,
-    medicineAvailability: 0,
-    patientsWaiting: 0,
-    pendingHighRiskAlerts: 0,
-    totalPatients: 0,
-    facilitiesActive: 0,
-    avgResponseTimeMinutes: 0,
-    referralCompletionRate: 0,
-    topConditions: [],
-  };
+  const stats = data || DEFAULT_STATS;
 
-  const alerts = (alertsData?.data || []) as Alert[];
+  const alerts = ((alertsData?.data as Alert[] | undefined) || MOCK_ALERTS.data) as Alert[];
   const highRiskAlerts = alerts.filter(a => a.priority === 'CRITICAL' || a.priority === 'HIGH');
 
-  const activeReferrals = (referralsData?.data || []) as any[];
+  const activeReferrals = ((referralsData?.data as any[] | undefined) || MOCK_ACTIVE_REFERRALS) as any[];
   const redReferrals = activeReferrals.filter(r => r.severity === TriageSeverity.RED);
   const otherReferrals = activeReferrals.filter(r => r.severity !== TriageSeverity.RED);
   const sortedReferrals = [...redReferrals, ...otherReferrals];
@@ -130,9 +135,9 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             </View>
             <View style={styles.headerRight}>
               <LanguageSwitcher />
-              <View style={styles.avatar}>
+              <TouchableOpacity style={styles.avatar} onPress={() => setShowProfileModal(true)} activeOpacity={0.8}>
                 <Text style={styles.avatarText}>AD</Text>
-              </View>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -209,6 +214,49 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           <Text style={styles.sosFabText}>SOS</Text>
         </Animated.View>
       </TouchableOpacity>
+
+      <Modal visible={showProfileModal} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={styles.profileAvatar}>
+                <Text style={styles.profileAvatarText}>AD</Text>
+              </View>
+              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowProfileModal(false)}>
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.profileName}>Dr. Ananya Deshmukh</Text>
+            <Text style={styles.profileRole}>Chief Medical Officer (CMO)</Text>
+            <View style={styles.profileMetaBox}>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>🏥 Facility</Text>
+                <Text style={styles.profileValue}>Mulshi PHC (Pune)</Text>
+              </View>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>🆔 Staff ID</Text>
+                <Text style={styles.profileValue}>MH-PUN-DOC-401</Text>
+              </View>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>⏰ Shift</Text>
+                <Text style={styles.profileValue}>Night Duty (20:00 - 08:00)</Text>
+              </View>
+              <View style={styles.profileRow}>
+                <Text style={styles.profileLabel}>📶 Offline Sync</Text>
+                <Text style={[styles.profileValue, { color: COLORS.success, fontWeight: '700' }]}>✓ 100% Synced</Text>
+              </View>
+            </View>
+            <View style={styles.profileActions}>
+              <TouchableOpacity style={styles.roleSwitchBtn} onPress={() => { toggleDemoMode(); setShowProfileModal(false); }}>
+                <Text style={styles.roleSwitchText}>🎮 Toggle Demo Mode</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.logoutBtn} onPress={() => setShowProfileModal(false)}>
+                <Text style={styles.logoutText}>Close Profile</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -240,15 +288,16 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: COLORS.border },
   sosFab: {
     position: 'absolute',
-    bottom: theme.layout.tabBarHeight + 16,
+    bottom: theme.layout.tabBarHeight + 12,
     right: 16,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(198,40,40,0.1)',
+    backgroundColor: 'rgba(198,40,40,0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 10,
+    zIndex: 99,
+    elevation: 8,
   },
   sosFabInner: {
     width: 50,
@@ -269,4 +318,22 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 2,
   },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalCard: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  profileAvatarText: { color: '#FFF', fontSize: 24, fontWeight: '800' },
+  modalCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F0F0F0', alignItems: 'center', justifyContent: 'center' },
+  modalCloseText: { fontSize: 16, color: '#666', fontWeight: '700' },
+  profileName: { fontSize: 22, fontWeight: '800', color: COLORS.textPrimary },
+  profileRole: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 20 },
+  profileMetaBox: { backgroundColor: '#F8F9FA', borderRadius: 16, padding: 16, gap: 12, marginBottom: 24 },
+  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  profileLabel: { fontSize: 14, color: COLORS.textSecondary },
+  profileValue: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  profileActions: { gap: 12 },
+  roleSwitchBtn: { backgroundColor: '#E0F2F1', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  roleSwitchText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
+  logoutBtn: { backgroundColor: '#F5F5F5', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+  logoutText: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 15 },
 });

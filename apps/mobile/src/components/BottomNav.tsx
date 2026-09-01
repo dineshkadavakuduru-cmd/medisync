@@ -1,13 +1,16 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { HomeScreen } from '../screens/HomeScreen';
 import { TriageScreen } from '../screens/TriageScreen';
 import { PatientsScreen } from '../screens/PatientsScreen';
 import { FacilityScreen } from '../screens/FacilityScreen';
 import { EmergencyScreen } from '../screens/EmergencyScreen';
+import { TeleconsultListScreen } from '../screens/TeleconsultListScreen';
+import { AppointmentBookScreen } from '../screens/AppointmentBookScreen';
+import { QueueScreen } from '../screens/QueueScreen';
 import { useTranslation } from '../i18n';
 
 const Tab = createBottomTabNavigator();
@@ -36,22 +39,32 @@ export const BottomNav: React.FC = () => {
         tabBarActiveTintColor: COLORS.primary,
         tabBarInactiveTintColor: COLORS.textSecondary,
         tabBarStyle: styles.tabBar,
-        tabBarLabelStyle: styles.tabLabel,
+        tabBarShowLabel: false,
         headerShown: false,
         tabBarIcon: ({ focused }) => {
           const icons: Record<string, string> = {
             Home: '🏠',
             Triage: '🤖',
+            Teleconsult: '📹',
+            Appointments: '📅',
             Patients: '👥',
             Facility: '🏥',
             Emergency: '🚨',
           };
-          return <TabIcon focused={focused} icon={icons[route.name]} label={t(`common.${route.name.toLowerCase()}` as any) || route.name} />;
+          return (
+            <TabIcon
+              focused={focused}
+              icon={icons[route.name]}
+              label={t(`common.${route.name.toLowerCase()}` as any) || route.name}
+            />
+          );
         },
       })}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Triage" component={TriageScreen} />
+      <Tab.Screen name="Teleconsult" component={TeleconsultListScreen} />
+      <Tab.Screen name="Appointments" component={QueueScreen} />
       <Tab.Screen name="Patients" component={PatientsScreen} />
       <Tab.Screen name="Facility" component={FacilityScreen} />
       <Tab.Screen name="Emergency" component={EmergencyScreen} />
@@ -64,14 +77,10 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingBottom: theme.spacing.sm,
-    height: theme.layout.tabBarHeight,
+    paddingBottom: 8,
+    paddingTop: 6,
+    height: 68,
     ...theme.shadows.lg,
-  },
-  tabLabel: {
-    fontSize: theme.typography.fontSize.xs,
-    fontWeight: theme.typography.fontWeight.medium,
-    marginTop: 2,
   },
   iconContainer: {
     alignItems: 'center',

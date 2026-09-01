@@ -1,9 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@arogyasetu/shared'],
+  transpilePackages: ['@medisync/shared'],
   experimental: {
-    optimizePackageImports: ['@arogyasetu/shared'],
+    optimizePackageImports: ['@medisync/shared'],
   },
 };
 

@@ -1,4 +1,4 @@
-import { WSMessageType, WSMessage } from '@arogyasetu/shared';
+import { WSMessageType, WSMessage } from '@medisync/shared';
 
 export type { WSMessageType };
 
@@ -79,6 +79,6 @@ export function setupEmergencyListeners(options: {
     ['EMERGENCY_ESCALATED', (data) => { options.onEscalated(data); options.onRefetch?.(); }],
     ['AMBULANCE_DISPATCHED', (data) => { options.onAmbulanceDispatched(data); options.onRefetch?.(); }],
   ];
-  handlers.forEach(([type, handler]) => wsClient.on(type as import('@arogyasetu/shared').WSMessageType, handler));
-  return () => handlers.forEach(([type, handler]) => wsClient.off(type as import('@arogyasetu/shared').WSMessageType, handler));
+  handlers.forEach(([type, handler]) => wsClient.on(type as import('@medisync/shared').WSMessageType, handler));
+  return () => handlers.forEach(([type, handler]) => wsClient.off(type as import('@medisync/shared').WSMessageType, handler));
 }

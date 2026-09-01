@@ -1,4 +1,4 @@
--- ArogyaSetu+ Database Schema for PostgreSQL with PostGIS
+-- MediSync Database Schema for PostgreSQL with PostGIS
 -- Run this to create all tables, indexes, and constraints
 
 -- Enable PostGIS extension for geospatial queries
@@ -112,6 +112,89 @@ CREATE TABLE medicine_inventory (
     UNIQUE(facility_id, medicine_name)
 );
 
+-- Teleconsultation Sessions table
+CREATE TABLE teleconsult_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID REFERENCES patients(id) ON DELETE SET NULL,
+    patient_name VARCHAR(255) NOT NULL,
+    from_facility_id UUID NOT NULL REFERENCES facilities(id) ON DELETE RESTRICT,
+    doctor_id UUID NOT NULL,
+    doctor_name VARCHAR(255) NOT NULL,
+    referral_id UUID REFERENCES referrals(id) ON DELETE SET NULL,
+    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED', 'ACCEPTED', 'DECLINED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+    meeting_link TEXT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Appointments table
+CREATE TABLE appointments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    patient_name VARCHAR(255) NOT NULL,
+    facility_id UUID NOT NULL REFERENCES facilities(id) ON DELETE RESTRICT,
+    facility_name VARCHAR(255) NOT NULL,
+    doctor_id UUID,
+    doctor_name VARCHAR(255),
+    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    type VARCHAR(20) NOT NULL CHECK (type IN ('OUTPATIENT', 'TELECONSULT', 'DIAGNOSTIC')),
+    status VARCHAR(20) NOT NULL DEFAULT 'BOOKED' CHECK (status IN ('BOOKED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW')),
+    estimated_wait_minutes INTEGER NOT NULL DEFAULT 0,
+    priority VARCHAR(10) NOT NULL DEFAULT 'GREEN' CHECK (priority IN ('GREEN', 'YELLOW', 'RED')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Diagnostic Orders table
+CREATE TABLE diagnostic_orders (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    patient_id UUID NOT NULL REFERENCES patients(id) ON DELETE CASCADE,
+    patient_name VARCHAR(255) NOT NULL,
+    facility_id UUID NOT NULL REFERENCES facilities(id) ON DELETE RESTRICT,
+    facility_name VARCHAR(255) NOT NULL,
+    triage_id UUID,
+    referral_id UUID REFERENCES referrals(id) ON DELETE SET NULL,
+    tests TEXT[] NOT NULL DEFAULT '{}',
+    priority VARCHAR(10) NOT NULL DEFAULT 'ROUTINE' CHECK (priority IN ('ROUTINE', 'URGENT', 'STAT')),
+    status VARCHAR(20) NOT NULL DEFAULT 'ORDERED' CHECK (status IN ('ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED')),
+    ordered_by VARCHAR(255) NOT NULL,
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Test Results table
+CREATE TABLE test_results (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    order_id UUID NOT NULL REFERENCES diagnostic_orders(id) ON DELETE CASCADE,
+    test_name VARCHAR(255) NOT NULL,
+    test_code VARCHAR(50) NOT NULL,
+    value VARCHAR(255) NOT NULL,
+    unit VARCHAR(50),
+    flag VARCHAR(10) NOT NULL CHECK (flag IN ('NORMAL', 'ABNORMAL', 'CRITICAL')),
+    reference_range VARCHAR(255),
+    reported_by VARCHAR(255),
+    reported_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- FHIR Mappings table
+CREATE TABLE fhir_mappings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    internal_id UUID NOT NULL,
+    entity_type VARCHAR(50) NOT NULL,
+    fhir_resource_id VARCHAR(255) NOT NULL,
+    fhir_resource_type VARCHAR(50) NOT NULL,
+    abha_id VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(internal_id, fhir_resource_type)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_patients_abha_id ON patients(abha_id);
 CREATE INDEX idx_patients_district ON patients(district);
@@ -145,6 +228,32 @@ CREATE INDEX idx_alerts_created_at ON alerts(created_at DESC);
 CREATE INDEX idx_medicine_inventory_facility_id ON medicine_inventory(facility_id);
 CREATE INDEX idx_medicine_inventory_medicine_name ON medicine_inventory(medicine_name);
 
+CREATE INDEX idx_teleconsult_sessions_patient_id ON teleconsult_sessions(patient_id);
+CREATE INDEX idx_teleconsult_sessions_doctor_id ON teleconsult_sessions(doctor_id);
+CREATE INDEX idx_teleconsult_sessions_from_facility ON teleconsult_sessions(from_facility_id);
+CREATE INDEX idx_teleconsult_sessions_status ON teleconsult_sessions(status);
+CREATE INDEX idx_teleconsult_sessions_scheduled_at ON teleconsult_sessions(scheduled_at);
+
+CREATE INDEX idx_appointments_patient_id ON appointments(patient_id);
+CREATE INDEX idx_appointments_facility_id ON appointments(facility_id);
+CREATE INDEX idx_appointments_doctor_id ON appointments(doctor_id);
+CREATE INDEX idx_appointments_status ON appointments(status);
+CREATE INDEX idx_appointments_scheduled_at ON appointments(scheduled_at);
+CREATE INDEX idx_appointments_priority ON appointments(priority);
+
+CREATE INDEX idx_diagnostic_orders_patient_id ON diagnostic_orders(patient_id);
+CREATE INDEX idx_diagnostic_orders_facility_id ON diagnostic_orders(facility_id);
+CREATE INDEX idx_diagnostic_orders_status ON diagnostic_orders(status);
+CREATE INDEX idx_diagnostic_orders_triage_id ON diagnostic_orders(triage_id);
+
+CREATE INDEX idx_test_results_order_id ON test_results(order_id);
+CREATE INDEX idx_test_results_test_code ON test_results(test_code);
+CREATE INDEX idx_test_results_flag ON test_results(flag);
+
+CREATE INDEX idx_fhir_mappings_internal_id ON fhir_mappings(internal_id);
+CREATE INDEX idx_fhir_mappings_fhir_resource_id ON fhir_mappings(fhir_resource_id);
+CREATE INDEX idx_fhir_mappings_abha_id ON fhir_mappings(abha_id);
+
 -- Updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
@@ -162,6 +271,10 @@ CREATE TRIGGER update_health_records_updated_at BEFORE UPDATE ON health_records 
 CREATE TRIGGER update_referrals_updated_at BEFORE UPDATE ON referrals FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_alerts_updated_at BEFORE UPDATE ON alerts FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_medicine_inventory_updated_at BEFORE UPDATE ON medicine_inventory FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_teleconsult_sessions_updated_at BEFORE UPDATE ON teleconsult_sessions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_appointments_updated_at BEFORE UPDATE ON appointments FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_diagnostic_orders_updated_at BEFORE UPDATE ON diagnostic_orders FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_fhir_mappings_updated_at BEFORE UPDATE ON fhir_mappings FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Function to find nearest facilities with available beds
 CREATE OR REPLACE FUNCTION find_nearest_facilities(

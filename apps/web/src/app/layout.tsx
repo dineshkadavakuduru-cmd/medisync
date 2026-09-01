@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { AppLayout } from '@/components/common/AppLayout';
 
 export const metadata: Metadata = {
-  title: 'ArogyaSetu+ | District Command Centre',
+  title: 'MediSync | District Command Centre',
   description: 'Rural Healthcare Platform for SIH 2026',
 };
 

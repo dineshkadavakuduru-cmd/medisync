@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { COLORS } from '@arogyasetu/shared';
+import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 export interface StatCardProps {
@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     fontSize: theme.typography.fontSize['3xl'],
     fontWeight: theme.typography.fontWeight.bold,
-    lineHeight: theme.typography.lineHeight.tight,
+    marginVertical: 4,
   },
   subtitle: {
     color: COLORS.textSecondary,

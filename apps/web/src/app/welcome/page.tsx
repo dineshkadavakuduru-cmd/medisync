@@ -25,7 +25,7 @@ export default function WelcomePage() {
             <div className="w-8 h-8 rounded-lg bg-[#00695C] flex items-center justify-center">
               <span className="text-white text-lg">🏥</span>
             </div>
-            <span className="text-xl font-bold text-[#00695C]">ArogyaSetu+</span>
+            <span className="text-xl font-bold text-[#00695C]">MediSync</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm font-medium hover:text-[#00695C] transition-colors" style={{ color: scrolled ? '#757575' : 'rgba(255,255,255,0.9)' }}>Features</a>
@@ -90,7 +90,7 @@ export default function WelcomePage() {
       <section id="features" className="py-20 bg-[#F5F5F5]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-[#212121] mb-4">How ArogyaSetu+ Solves This</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-[#212121] mb-4">How MediSync Solves This</h2>
             <p className="text-[#757575] max-w-2xl mx-auto">Comprehensive solutions designed for the unique challenges of rural healthcare delivery.</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -178,7 +178,7 @@ export default function WelcomePage() {
       <footer className="bg-[#212121] py-8">
         <div className="max-w-7xl mx-auto px-6 text-center">
           <p className="text-white/60 text-sm">
-            ArogyaSetu+ © 2026 | SIH 2026 — PS26133 | Government of Maharashtra
+            MediSync © 2026 | SIH 2026 — PS26133 | Government of Maharashtra
           </p>
         </div>
       </footer>

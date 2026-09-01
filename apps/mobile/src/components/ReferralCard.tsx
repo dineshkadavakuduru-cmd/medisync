@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { COLORS, TriageSeverity, ReferralStatus } from '@arogyasetu/shared';
+import { COLORS, TriageSeverity, ReferralStatus } from '@medisync/shared';
 import { theme } from '../styles/theme';
 
 interface Referral {
@@ -38,7 +38,7 @@ export const ReferralCard: React.FC<ReferralCardProps> = ({ referral, onPress })
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.header}>
-        <Text style={styles.patientName}>Patient #{referral.patientId.slice(-4)}</Text>
+        <Text style={styles.patientName}>Patient #{referral.patientId?.slice(-4) ?? 'N/A'}</Text>
         <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
           <Text style={styles.statusText}>{statusInfo.label}</Text>
         </View>
