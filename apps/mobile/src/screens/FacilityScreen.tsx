@@ -146,7 +146,7 @@ export const FacilityScreen: React.FC = () => {
         </View>
 
         <View style={styles.meterRow}>
-          <MaterialCommunityIcons name="bed-outline" size={16} color={COLORS.textSecondary} style={styles.meterIcon} />
+          <MaterialCommunityIcons name="bed-outline" size={18} color={COLORS.primary} style={styles.meterIcon} />
           <Text style={styles.meterLabel}>{item.beds.available}/{item.beds.total} {t('facility.bedsAvailable')}</Text>
           <View style={styles.meterBarBg}>
             <View style={[styles.meterBar, { width: `${bedPercent}%`, backgroundColor: bedColor }]} />
@@ -154,8 +154,8 @@ export const FacilityScreen: React.FC = () => {
         </View>
 
         <View style={styles.meterRow}>
-          <MaterialCommunityIcons name="pill" size={16} color={COLORS.textSecondary} style={styles.meterIcon} />
-          <Text style={styles.meterLabel}>{item.medicineAvailability}%</Text>
+          <MaterialCommunityIcons name="pill" size={18} color={COLORS.primary} style={styles.meterIcon} />
+          <Text style={styles.meterLabel}>{item.medicineAvailability}% {t('facility.medicineAvailability') || 'stock'}</Text>
           <View style={styles.meterBarBg}>
             <View style={[styles.meterBar, { width: `${item.medicineAvailability}%`, backgroundColor: medColor }]} />
           </View>
@@ -196,23 +196,31 @@ export const FacilityScreen: React.FC = () => {
         <Text style={styles.headerTitle}>{t('facility.title')}</Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-        {(['ALL', FacilityType.SUB_CENTRE, FacilityType.PHC, FacilityType.CHC, FacilityType.DISTRICT_HOSPITAL] as const).map((type) => {
-          const label = type === 'ALL' ? t('facility.all') : FACILITY_TYPE_LABELS[type];
-          const count = typeCounts[type] || 0;
-          return (
-            <TouchableOpacity
-              key={type}
-              style={[styles.filterChip, filterType === type && styles.filterChipActive]}
-              onPress={() => setFilterType(type)}
-            >
-              <Text style={[styles.filterChipText, filterType === type && styles.filterChipTextActive]}>
-                {label} ({count})
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+      <View style={styles.filterWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterScrollContent}
+        >
+          {(['ALL', FacilityType.SUB_CENTRE, FacilityType.PHC, FacilityType.CHC, FacilityType.DISTRICT_HOSPITAL] as const).map((type) => {
+            const label = type === 'ALL' ? t('facility.all') : FACILITY_TYPE_LABELS[type];
+            const count = typeCounts[type] || 0;
+            const isActive = filterType === type;
+            return (
+              <TouchableOpacity
+                key={type}
+                style={[styles.filterChip, isActive && styles.filterChipActive]}
+                onPress={() => setFilterType(type)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                  {label} ({count})
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
       <FlatList
         data={filtered}
@@ -228,38 +236,71 @@ export const FacilityScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { paddingHorizontal: theme.layout.screenPadding, paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
-  headerTitle: { fontSize: theme.typography.fontSize['2xl'], fontWeight: theme.typography.fontWeight.bold, color: COLORS.textPrimary },
-  filterScroll: {
-    flexGrow: 0,
-    height: 42,
-    marginBottom: theme.spacing.sm,
-    paddingHorizontal: theme.layout.screenPadding,
+  header: {
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 8,
   },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  filterWrapper: {
+    marginBottom: 12,
+  },
+  filterScrollContent: {
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   filterChip: {
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: COLORS.surface,
-    marginRight: theme.spacing.sm,
+    borderRadius: 20,
+    backgroundColor: '#FFFFFF',
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: '#E5E7EB',
     height: 36,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
-  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
-  filterChipText: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, fontWeight: '500' },
-  filterChipTextActive: { color: COLORS.textOnPrimary },
-  listContent: { paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.layout.tabBarHeight + theme.spacing.lg, gap: theme.spacing.md },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterChipText: {
+    fontSize: 13,
+    color: COLORS.textSecondary,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  listContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 90,
+    gap: 14,
+  },
   card: {
-    backgroundColor: COLORS.surface,
-    borderRadius: theme.borderRadius.sm,
-    padding: theme.spacing.lg,
-    ...theme.shadows.sm,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.md },
   cardName: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.bold, color: COLORS.textPrimary, flex: 1, marginRight: theme.spacing.sm },
