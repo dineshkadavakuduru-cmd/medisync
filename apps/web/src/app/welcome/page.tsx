@@ -20,7 +20,7 @@ export default function WelcomePage() {
           scrolled ? 'bg-white/95 backdrop-blur-md shadow-md' : 'bg-transparent'
         }`}
       >
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-[#00695C] flex items-center justify-center">
               <span className="text-white text-lg">🏥</span>
@@ -33,6 +33,11 @@ export default function WelcomePage() {
             <a href="#impact" className="text-sm font-medium hover:text-[#00695C] transition-colors" style={{ color: scrolled ? '#757575' : 'rgba(255,255,255,0.9)' }}>Impact</a>
             <Link href="/" className="px-4 py-2 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
               Dashboard →
+            </Link>
+          </div>
+          <div className="md:hidden">
+            <Link href="/" className="px-3 py-1.5 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
+              Launch App →
             </Link>
           </div>
         </div>

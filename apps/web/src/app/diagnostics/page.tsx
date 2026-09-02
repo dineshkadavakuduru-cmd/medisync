@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Header } from '@/components/common/Header';
-import { Sidebar } from '@/components/common/Sidebar';
 
 interface DiagnosticOrder {
   id: string;
@@ -70,18 +68,11 @@ export default function DiagnosticsPage() {
   const filtered = filter === 'ALL' ? orders : orders.filter((o) => o.status === filter);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="container space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Diagnostic Coordination</h1>
-                <p className="text-sm text-[var(--text-secondary)]">Manage lab orders and track results</p>
-              </div>
-            </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Diagnostic Coordination</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Manage lab orders and track results</p>
+      </div>
 
             <div className="card">
               <div className="flex items-center gap-2 mb-4">
@@ -145,11 +136,8 @@ export default function DiagnosticsPage() {
                     );
                   })}
                 </div>
-              )}
-            </div>
-          </div>
-        </main>
-      </div>
+                  )}
+               </div>
     </div>
   );
 }

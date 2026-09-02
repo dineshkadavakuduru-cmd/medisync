@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Header } from '@/components/common/Header';
-import { Sidebar } from '@/components/common/Sidebar';
 
 interface Appointment {
   id: string;
@@ -83,18 +81,11 @@ export default function AppointmentsPage() {
   const filtered = filter === 'ALL' ? appointments : appointments.filter((a) => a.status === filter);
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="container space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Appointments & Queue</h1>
-                <p className="text-sm text-[var(--text-secondary)]">Manage patient appointments and facility queues</p>
-              </div>
-            </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Appointments & Queue</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Manage patient appointments and facility queues</p>
+      </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 card">
@@ -179,12 +170,9 @@ export default function AppointmentsPage() {
                       );
                     })}
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
+                 )}
+               </div>
+             </div>
     </div>
   );
 }

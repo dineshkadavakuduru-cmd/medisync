@@ -204,9 +204,9 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h1 className="text-2xl font-bold text-[var(--text-primary)]">Predictive Analytics</h1>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {(['4', '8', '12'] as TimeRange[]).map((range) => (
             <button
               key={range}
@@ -433,7 +433,7 @@ export default function AnalyticsPage() {
                 })}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                 <div>
                   <h4 className="font-semibold text-[var(--success)] mb-2">Top Positive</h4>
                   <div className="flex flex-wrap gap-2">

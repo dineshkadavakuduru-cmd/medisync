@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Header } from '@/components/common/Header';
-import { Sidebar } from '@/components/common/Sidebar';
 
 interface TeleconsultSession {
   id: string;
@@ -99,21 +97,16 @@ export default function TeleconsultPage() {
   };
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="container space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Teleconsultation</h1>
-                <p className="text-sm text-[var(--text-secondary)]">Connect patients with specialists remotely</p>
-              </div>
-              <button onClick={() => setShowCreate(true)} className="btn btn-primary">
-                + New Session
-              </button>
-            </div>
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[var(--text-primary)]">Teleconsultation</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Connect patients with specialists remotely</p>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn btn-primary self-start sm:self-auto">
+          + New Session
+        </button>
+      </div>
 
             {showCreate && (
               <div className="card">
@@ -233,12 +226,9 @@ export default function TeleconsultPage() {
                       })}
                     </tbody>
                   </table>
+                 </div>
+                   )}
                 </div>
-              )}
-            </div>
-          </div>
-        </main>
-      </div>
     </div>
   );
 }

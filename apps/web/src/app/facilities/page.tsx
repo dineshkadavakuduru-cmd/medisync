@@ -132,30 +132,30 @@ export default function FacilitiesPage() {
       </div>
 
       <div className="card p-0 overflow-hidden">
-        <div className="bg-gradient-to-r from-[var(--primary)] to-[#004d43] p-6 text-white">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="bg-gradient-to-r from-[var(--primary)] to-[#004d43] p-4 sm:p-6 text-white">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
             <div className="text-center">
-              <div className="text-2xl font-bold">{districtSummary?.totalBeds || 0}</div>
+              <div className="text-xl sm:text-2xl font-bold">{districtSummary?.totalBeds || 0}</div>
               <div className="text-xs opacity-80 mt-1">Total Beds</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold">{districtSummary?.availableBeds || 0}</div>
+              <div className="text-xl sm:text-2xl font-bold">{districtSummary?.availableBeds || 0}</div>
               <div className="text-xs opacity-80 mt-1">Available Beds</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold">{districtSummary?.avgMedicineAvailability || 0}%</div>
+              <div className="text-xl sm:text-2xl font-bold">{districtSummary?.avgMedicineAvailability || 0}%</div>
               <div className="text-xs opacity-80 mt-1">Avg Medicine</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold">{districtSummary?.totalStaffOnDuty || 0}</div>
+              <div className="text-xl sm:text-2xl font-bold">{districtSummary?.totalStaffOnDuty || 0}</div>
               <div className="text-xs opacity-80 mt-1">Staff On Duty</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold">{districtSummary?.facilitiesWithCriticalStock || 0}</div>
+              <div className="text-xl sm:text-2xl font-bold">{districtSummary?.facilitiesWithCriticalStock || 0}</div>
               <div className="text-xs opacity-80 mt-1">Critical Stock</div>
             </div>
             <div className="text-center">
-              <div className="text-2xl font-bold">{facilities.length}</div>
+              <div className="text-xl sm:text-2xl font-bold">{facilities.length}</div>
               <div className="text-xs opacity-80 mt-1">Facilities</div>
             </div>
           </div>
@@ -163,7 +163,7 @@ export default function FacilitiesPage() {
       </div>
 
       <div className="card">
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-4 items-stretch sm:items-center">
           <select
             value={filterType}
             onChange={(e) => setFilterType(e.target.value)}
@@ -180,7 +180,7 @@ export default function FacilitiesPage() {
             placeholder="Search facilities..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm"
+            className="px-3 py-2 bg-[var(--background)] border border-[var(--border)] rounded-lg text-sm flex-1 min-w-0"
           />
           <select
             value={sortBy}
@@ -192,7 +192,7 @@ export default function FacilitiesPage() {
             <option value="medicineAvailability">Sort: Medicine</option>
             <option value="performanceScore">Sort: Performance</option>
           </select>
-          <span className="text-sm text-[var(--text-secondary)] ml-auto">
+          <span className="text-sm text-[var(--text-secondary)] sm:ml-auto text-center sm:text-right">
             {filtered.length} of {facilities.length} facilities
           </span>
         </div>

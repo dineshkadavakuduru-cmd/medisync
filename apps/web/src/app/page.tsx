@@ -196,7 +196,7 @@ export default function DashboardPage() {
 
       {activeLevel1.length > 0 && (
         <div className="bg-gradient-to-r from-red-600 to-red-700 text-white p-4 rounded-lg shadow-lg animate-pulse">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="font-bold text-lg">🚨 ACTIVE LEVEL 1 EMERGENCY{activeLevel1.length > 1 ? 'S' : ''}</h3>
               {activeLevel1.map((e) => (
@@ -205,7 +205,7 @@ export default function DashboardPage() {
                 </p>
               ))}
             </div>
-            <a href="/alerts" className="bg-white text-red-600 px-4 py-2 rounded-lg font-semibold hover:bg-red-50 transition-colors">
+            <a href="/alerts" className="bg-white text-red-600 px-4 py-2 rounded-lg font-semibold hover:bg-red-50 transition-colors text-center whitespace-nowrap self-start sm:self-auto">
               View Details →
             </a>
           </div>
@@ -214,11 +214,11 @@ export default function DashboardPage() {
 
       {activeLevel1.length === 0 && activeOther.length > 0 && (
         <div className="bg-gradient-to-r from-amber-500 to-amber-600 text-white p-4 rounded-lg shadow-lg">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="font-bold text-lg">⚠️ {activeOther.length} Active Emergency{activeOther.length > 1 ? 'ies' : 'y'} Requiring Attention</h3>
             </div>
-            <a href="/alerts" className="bg-white text-amber-600 px-4 py-2 rounded-lg font-semibold hover:bg-amber-50 transition-colors">
+            <a href="/alerts" className="bg-white text-amber-600 px-4 py-2 rounded-lg font-semibold hover:bg-amber-50 transition-colors text-center whitespace-nowrap self-start sm:self-auto">
               View →
             </a>
           </div>

@@ -1,8 +1,6 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Header } from '@/components/common/Header';
-import { Sidebar } from '@/components/common/Sidebar';
 
 interface TriageRecord {
   id: string;
@@ -54,18 +52,11 @@ export default function TriageManagementPage() {
   };
 
   return (
-    <div className="flex h-screen">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="container space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-[var(--text-primary)]">AI Triage Management</h1>
-                <p className="text-sm text-[var(--text-secondary)]">Monitor and review AI-powered triage assessments</p>
-              </div>
-            </div>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-[var(--text-primary)]">AI Triage Management</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Monitor and review AI-powered triage assessments</p>
+      </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="card">
@@ -124,11 +115,8 @@ export default function TriageManagementPage() {
                     )}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
+               </div>
+             </div>
     </div>
   );
 }
