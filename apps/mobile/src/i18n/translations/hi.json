@@ -2,6 +2,8 @@
   "common": {
     "home": "होम",
     "triage": "ट्राइएज",
+    "teleconsult": "टेली-परामर्श",
+    "appointments": "अपॉइंटमेंट",
     "patients": "मरीज़",
     "facility": "सुविधा",
     "emergency": "आपातकाल",

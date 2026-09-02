@@ -2,6 +2,8 @@
   "common": {
     "home": "Home",
     "triage": "Triage",
+    "teleconsult": "Teleconsult",
+    "appointments": "Appts",
     "patients": "Patients",
     "facility": "Facility",
     "emergency": "Emergency",

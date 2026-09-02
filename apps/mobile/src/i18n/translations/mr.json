@@ -2,6 +2,8 @@
   "common": {
     "home": "मुख्यपृष्ठ",
     "triage": "ट्रायएज",
+    "teleconsult": "टेलिकन्सल्ट",
+    "appointments": "अपॉइंटमेंट",
     "patients": "रुग्ण",
     "facility": "सुविधा",
     "emergency": "आणीबाणी",

@@ -25,8 +25,10 @@ const TabIcon: React.FC<TabIconProps> = ({ focused, icon, label }) => {
   const color = focused ? COLORS.primary : COLORS.textSecondary;
   return (
     <View style={styles.iconContainer}>
-      <Text style={[styles.icon, { color, fontSize: focused ? 26 : 24 }]}>{icon}</Text>
-      <Text style={[styles.label, { color, fontWeight: focused ? '600' : '400' }]}>{label}</Text>
+      <Text style={[styles.icon, { fontSize: 20 }]}>{icon}</Text>
+      <Text style={[styles.label, { color, fontWeight: focused ? '700' : '500' }]} numberOfLines={1}>
+        {label}
+      </Text>
     </View>
   );
 };
@@ -77,15 +79,19 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
-    paddingBottom: 8,
-    paddingTop: 6,
-    height: 68,
+    paddingBottom: 4,
+    paddingTop: 4,
+    height: 62,
     ...theme.shadows.lg,
   },
   iconContainer: {
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+    gap: 1,
   },
   icon: {},
-  label: {},
+  label: {
+    fontSize: 10,
+    marginTop: 1,
+  },
 });
