@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { COLORS } from '@medisync/shared';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
 import { HomeScreen } from '../screens/HomeScreen';
 import { TriageScreen } from '../screens/TriageScreen';
@@ -15,17 +16,31 @@ import { useTranslation } from '../i18n';
 
 const Tab = createBottomTabNavigator();
 
+type IconName = keyof typeof MaterialCommunityIcons.glyphMap;
+
 interface TabIconProps {
   focused: boolean;
-  icon: string;
+  routeName: string;
   label: string;
 }
 
-const TabIcon: React.FC<TabIconProps> = ({ focused, icon, label }) => {
-  const color = focused ? COLORS.primary : COLORS.textSecondary;
+const TAB_ICONS: Record<string, IconName> = {
+  Home: 'home-variant-outline',
+  Triage: 'stethoscope',
+  Teleconsult: 'video-outline',
+  Appointments: 'calendar-clock-outline',
+  Patients: 'account-group-outline',
+  Facility: 'hospital-building',
+  Emergency: 'alarm-light-outline',
+};
+
+const TabIcon: React.FC<TabIconProps> = ({ focused, routeName, label }) => {
+  const color = focused ? COLORS.primary : '#8E8E93';
+  const iconName = TAB_ICONS[routeName] || 'circle-outline';
+
   return (
     <View style={styles.iconContainer}>
-      <Text style={[styles.icon, { fontSize: 20 }]}>{icon}</Text>
+      <MaterialCommunityIcons name={iconName} size={22} color={color} />
       <Text style={[styles.label, { color, fontWeight: focused ? '700' : '500' }]} numberOfLines={1}>
         {label}
       </Text>
@@ -44,19 +59,10 @@ export const BottomNav: React.FC = () => {
         tabBarShowLabel: false,
         headerShown: false,
         tabBarIcon: ({ focused }) => {
-          const icons: Record<string, string> = {
-            Home: '🏠',
-            Triage: '🤖',
-            Teleconsult: '📹',
-            Appointments: '📅',
-            Patients: '👥',
-            Facility: '🏥',
-            Emergency: '🚨',
-          };
           return (
             <TabIcon
               focused={focused}
-              icon={icons[route.name]}
+              routeName={route.name}
               label={t(`common.${route.name.toLowerCase()}` as any) || route.name}
             />
           );
@@ -89,7 +95,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 1,
   },
-  icon: {},
   label: {
     fontSize: 10,
     marginTop: 1,

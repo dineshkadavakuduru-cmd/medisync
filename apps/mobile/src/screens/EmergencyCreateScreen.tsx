@@ -15,36 +15,38 @@ import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
 import { useTranslation } from '../i18n';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 interface ConditionOption {
   key: string;
   label: string;
   level: 'LEVEL_1' | 'LEVEL_2' | 'LEVEL_3';
-  icon: string;
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  iconColor: string;
 }
 
 const CONDITIONS: ConditionOption[] = [
-  { key: 'cardiac_arrest', label: 'Cardiac Arrest', level: 'LEVEL_1', icon: '🫀' },
-  { key: 'stroke', label: 'Stroke', level: 'LEVEL_1', icon: '🧠' },
-  { key: 'severe_bleeding', label: 'Severe Bleeding', level: 'LEVEL_1', icon: '🩸' },
-  { key: 'unconscious', label: 'Unconscious', level: 'LEVEL_1', icon: '😵' },
-  { key: 'snakebite', label: 'Snakebite', level: 'LEVEL_1', icon: '🐍' },
-  { key: 'poisoning', label: 'Poisoning', level: 'LEVEL_1', icon: '☠️' },
-  { key: 'severe_burns', label: 'Severe Burns', level: 'LEVEL_1', icon: '🔥' },
-  { key: 'pregnancy_emergency', label: 'Pregnancy Emergency', level: 'LEVEL_1', icon: '🤰' },
-  { key: 'difficulty_breathing', label: 'Difficulty Breathing', level: 'LEVEL_1', icon: '🫁' },
-  { key: 'anaphylaxis', label: 'Anaphylaxis', level: 'LEVEL_1', icon: '⚠️' },
-  { key: 'high_fever_child', label: 'High Fever (Child)', level: 'LEVEL_2', icon: '🤒' },
-  { key: 'severe_dehydration', label: 'Severe Dehydration', level: 'LEVEL_2', icon: '💧' },
-  { key: 'fracture', label: 'Fracture', level: 'LEVEL_2', icon: '🦴' },
-  { key: 'seizure', label: 'Seizure', level: 'LEVEL_2', icon: '😣' },
-  { key: 'severe_abdominal_pain', label: 'Severe Abdominal Pain', level: 'LEVEL_2', icon: '🤢' },
-  { key: 'diabetic_emergency', label: 'Diabetic Emergency', level: 'LEVEL_2', icon: '🩺' },
-  { key: 'high_bp_crisis', label: 'High BP Crisis', level: 'LEVEL_2', icon: '💓' },
-  { key: 'animal_bite', label: 'Animal Bite', level: 'LEVEL_3', icon: '🐕' },
-  { key: 'moderate_injury', label: 'Moderate Injury', level: 'LEVEL_3', icon: '🤕' },
-  { key: 'allergic_reaction', label: 'Allergic Reaction', level: 'LEVEL_3', icon: '🤧' },
-  { key: 'persistent_vomiting', label: 'Persistent Vomiting', level: 'LEVEL_3', icon: '🤮' },
+  { key: 'cardiac_arrest', label: 'Cardiac Arrest', level: 'LEVEL_1', icon: 'heart-pulse', iconColor: '#D32F2F' },
+  { key: 'stroke', label: 'Stroke', level: 'LEVEL_1', icon: 'brain', iconColor: '#D32F2F' },
+  { key: 'severe_bleeding', label: 'Severe Bleeding', level: 'LEVEL_1', icon: 'water-alert', iconColor: '#D32F2F' },
+  { key: 'unconscious', label: 'Unconscious', level: 'LEVEL_1', icon: 'account-off-outline', iconColor: '#D32F2F' },
+  { key: 'snakebite', label: 'Snakebite', level: 'LEVEL_1', icon: 'snake', iconColor: '#D32F2F' },
+  { key: 'poisoning', label: 'Poisoning', level: 'LEVEL_1', icon: 'skull-crossbones-outline', iconColor: '#D32F2F' },
+  { key: 'severe_burns', label: 'Severe Burns', level: 'LEVEL_1', icon: 'fire', iconColor: '#D32F2F' },
+  { key: 'pregnancy_emergency', label: 'Pregnancy Emergency', level: 'LEVEL_1', icon: 'mother-nurse', iconColor: '#D32F2F' },
+  { key: 'difficulty_breathing', label: 'Difficulty Breathing', level: 'LEVEL_1', icon: 'lungs', iconColor: '#D32F2F' },
+  { key: 'anaphylaxis', label: 'Anaphylaxis', level: 'LEVEL_1', icon: 'alert-decagram-outline', iconColor: '#D32F2F' },
+  { key: 'high_fever_child', label: 'High Fever (Child)', level: 'LEVEL_2', icon: 'thermometer-high', iconColor: '#F57C00' },
+  { key: 'severe_dehydration', label: 'Severe Dehydration', level: 'LEVEL_2', icon: 'water-outline', iconColor: '#F57C00' },
+  { key: 'fracture', label: 'Fracture', level: 'LEVEL_2', icon: 'bone', iconColor: '#F57C00' },
+  { key: 'seizure', label: 'Seizure', level: 'LEVEL_2', icon: 'lightning-bolt', iconColor: '#F57C00' },
+  { key: 'severe_abdominal_pain', label: 'Severe Abdominal Pain', level: 'LEVEL_2', icon: 'emoticon-sick-outline', iconColor: '#F57C00' },
+  { key: 'diabetic_emergency', label: 'Diabetic Emergency', level: 'LEVEL_2', icon: 'needle', iconColor: '#F57C00' },
+  { key: 'high_bp_crisis', label: 'High BP Crisis', level: 'LEVEL_2', icon: 'speedometer', iconColor: '#F57C00' },
+  { key: 'animal_bite', label: 'Animal Bite', level: 'LEVEL_3', icon: 'paw', iconColor: '#0288D1' },
+  { key: 'moderate_injury', label: 'Moderate Injury', level: 'LEVEL_3', icon: 'bandage', iconColor: '#0288D1' },
+  { key: 'allergic_reaction', label: 'Allergic Reaction', level: 'LEVEL_3', icon: 'allergy', iconColor: '#0288D1' },
+  { key: 'persistent_vomiting', label: 'Persistent Vomiting', level: 'LEVEL_3', icon: 'stomach', iconColor: '#0288D1' },
 ];
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -140,7 +142,7 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
     return (
       <SafeAreaView style={styles.activatedContainer}>
         <Animated.View style={[styles.successCircle, { opacity: successAnim, transform: [{ scale: successAnim }] }]}>
-          <Text style={styles.successIcon}>✓</Text>
+          <MaterialCommunityIcons name="check-circle" size={48} color={COLORS.textOnPrimary} />
         </Animated.View>
         <Text style={styles.activatedTitle}>{t('emergency.emergencyActivated')}</Text>
         <Text style={styles.activatedId}>ID: {createdEmergency.id}</Text>
@@ -151,12 +153,15 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
         </View>
 
         <View style={styles.firstAidSection}>
-          <Text style={styles.firstAidTitle}>📋 {t('emergency.firstAidSteps')} ({completedCount}/{totalSteps})</Text>
+          <View style={styles.firstAidTitleRow}>
+            <MaterialCommunityIcons name="clipboard-text-outline" size={20} color={COLORS.textPrimary} />
+            <Text style={styles.firstAidTitle}>{t('emergency.firstAidSteps')} ({completedCount}/{totalSteps})</Text>
+          </View>
           <ScrollView style={styles.firstAidList}>
             {createdEmergency.firstAidSteps.map((step: string, index: number) => (
               <TouchableOpacity key={index} style={styles.firstAidItem} onPress={() => toggleStep(index)}>
                 <View style={[styles.checkbox, checkedSteps.has(index) && styles.checkboxChecked]}>
-                  {checkedSteps.has(index) && <Text style={styles.checkmark}>✓</Text>}
+                  {checkedSteps.has(index) && <MaterialCommunityIcons name="check" size={12} color={COLORS.textOnPrimary} />}
                 </View>
                 <Text style={[styles.firstAidText, checkedSteps.has(index) && styles.firstAidTextChecked]}>{step}</Text>
               </TouchableOpacity>
@@ -181,7 +186,9 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
           </TouchableOpacity>
 
           <View style={[styles.selectedConditionCard, { borderColor: levelColor }]}>
-            <Text style={styles.selectedConditionIcon}>{selectedCondition.icon}</Text>
+            <View style={[styles.conditionIconCircle, { backgroundColor: `${selectedCondition.iconColor}15` }]}>
+              <MaterialCommunityIcons name={selectedCondition.icon} size={28} color={selectedCondition.iconColor} />
+            </View>
             <View>
               <Text style={styles.selectedConditionLabel}>{selectedCondition.label}</Text>
               <View style={[styles.levelBadge, { backgroundColor: levelColor }]}>
@@ -236,7 +243,10 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
             onPress={handleActivate}
             disabled={submitting}
           >
-            <Text style={styles.activateButtonText}>{submitting ? 'ACTIVATING...' : `🚨 ${t('emergency.activateEmergency')}`}</Text>
+            <View style={styles.activateButtonContent}>
+              {!submitting && <MaterialCommunityIcons name="alarm-light-outline" size={20} color={COLORS.textOnPrimary} />}
+              <Text style={styles.activateButtonText}>{submitting ? 'ACTIVATING...' : t('emergency.activateEmergency')}</Text>
+            </View>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -247,7 +257,7 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
     <SafeAreaView style={styles.container}>
       <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>⚠️ {t('emergency.selectCondition')}</Text>
+        <Text style={styles.title}>{t('emergency.selectCondition')}</Text>
         <Text style={styles.subtitle}>{t('emergency.selectCondition')}</Text>
 
         <View style={styles.conditionsGrid}>
@@ -258,7 +268,9 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
               onPress={() => handleConditionSelect(condition)}
               activeOpacity={0.8}
             >
-              <Text style={styles.conditionIcon}>{condition.icon}</Text>
+              <View style={[styles.conditionIconCircle, { backgroundColor: `${condition.iconColor}15` }]}>
+                <MaterialCommunityIcons name={condition.icon} size={28} color={condition.iconColor} />
+              </View>
               <Text style={styles.conditionLabel}>{condition.label}</Text>
               <View style={[styles.conditionLevelBadge, { backgroundColor: LEVEL_COLORS[condition.level] }]}>
                 <Text style={styles.conditionLevelText}>{condition.level.replace('LEVEL_', 'L')}</Text>
@@ -319,8 +331,13 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     ...theme.shadows.sm,
   },
-  conditionIcon: {
-    fontSize: theme.typography.fontSize['3xl'],
+  conditionIconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: theme.spacing.sm,
   },
   conditionLabel: {
     fontSize: theme.typography.fontSize.sm,
@@ -346,9 +363,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.lg,
     borderWidth: 2,
-  },
-  selectedConditionIcon: {
-    fontSize: theme.typography.fontSize['3xl'],
   },
   selectedConditionLabel: {
     fontSize: theme.typography.fontSize.xl,
@@ -416,6 +430,11 @@ const styles = StyleSheet.create({
     minHeight: 80,
     textAlignVertical: 'top',
   },
+  activateButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
   activateButton: {
     backgroundColor: COLORS.emergency,
     paddingVertical: theme.spacing.lg,
@@ -452,11 +471,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: theme.spacing.lg,
   },
-  successIcon: {
-    fontSize: 48,
-    color: COLORS.emergency,
-    fontWeight: '700',
-  },
   activatedTitle: {
     fontSize: theme.typography.fontSize['2xl'],
     fontWeight: theme.typography.fontWeight.bold,
@@ -487,11 +501,17 @@ const styles = StyleSheet.create({
     padding: theme.spacing.lg,
     maxHeight: 300,
   },
+  firstAidTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
   firstAidTitle: {
     fontSize: theme.typography.fontSize.lg,
     fontWeight: theme.typography.fontWeight.bold,
     color: COLORS.textPrimary,
-    marginBottom: theme.spacing.md,
+    flex: 1,
   },
   firstAidList: {
     gap: theme.spacing.sm,
@@ -514,11 +534,6 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: COLORS.success,
     borderColor: COLORS.success,
-  },
-  checkmark: {
-    color: COLORS.textOnPrimary,
-    fontSize: 12,
-    fontWeight: '700',
   },
   firstAidText: {
     flex: 1,

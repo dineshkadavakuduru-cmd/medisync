@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FacilityType } from '@medisync/shared';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
 import { api, MOCK_FACILITIES } from '../services/api';
 import { wsClient } from '../services/websocket';
@@ -114,7 +115,7 @@ export const FacilityScreen: React.FC = () => {
 
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>🏥</Text>
+      <MaterialCommunityIcons name="hospital-building" size={64} color={COLORS.textSecondary} style={styles.emptyIcon} />
       <Text style={styles.emptyTitle}>{loading ? t('facility.loadingFacilities') : t('facility.unableToLoad')}</Text>
       {!loading && <Text style={styles.emptySubtitle}>{t('facility.checkConnection')}</Text>}
     </View>
@@ -145,7 +146,7 @@ export const FacilityScreen: React.FC = () => {
         </View>
 
         <View style={styles.meterRow}>
-          <Text style={styles.meterIcon}>🛏️</Text>
+          <MaterialCommunityIcons name="bed-outline" size={16} color={COLORS.textSecondary} style={styles.meterIcon} />
           <Text style={styles.meterLabel}>{item.beds.available}/{item.beds.total} {t('facility.bedsAvailable')}</Text>
           <View style={styles.meterBarBg}>
             <View style={[styles.meterBar, { width: `${bedPercent}%`, backgroundColor: bedColor }]} />
@@ -153,16 +154,21 @@ export const FacilityScreen: React.FC = () => {
         </View>
 
         <View style={styles.meterRow}>
-          <Text style={styles.meterIcon}>💊</Text>
+          <MaterialCommunityIcons name="pill" size={16} color={COLORS.textSecondary} style={styles.meterIcon} />
           <Text style={styles.meterLabel}>{item.medicineAvailability}%</Text>
           <View style={styles.meterBarBg}>
             <View style={[styles.meterBar, { width: `${item.medicineAvailability}%`, backgroundColor: medColor }]} />
           </View>
-          {hasCritical && <Text style={styles.criticalText}>⚠️ {Math.max(0, 100 - item.medicineAvailability)}% {t('facility.itemsCritical')}</Text>}
+          {hasCritical && (
+            <View style={styles.criticalTextContainer}>
+              <MaterialCommunityIcons name="alert-decagram-outline" size={12} color={COLORS.severityRed} />
+              <Text style={styles.criticalText}>{Math.max(0, 100 - item.medicineAvailability)}% {t('facility.itemsCritical')}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.staffRow}>
-          <Text style={styles.meterIcon}>👨‍⚕️</Text>
+          <MaterialCommunityIcons name="doctor" size={16} color={COLORS.textSecondary} style={styles.meterIcon} />
           <Text style={styles.meterLabel}>{item.specialists.length} specialists</Text>
           {item.specialists.slice(0, 2).map((s) => (
             <View key={s} style={styles.specialistChip}>
@@ -173,7 +179,7 @@ export const FacilityScreen: React.FC = () => {
 
         <View style={styles.cardFooter}>
           <TouchableOpacity style={styles.phoneRow}>
-            <Text style={styles.phoneIcon}>📞</Text>
+            <MaterialCommunityIcons name="phone-outline" size={16} color={COLORS.primary} style={styles.phoneIcon} />
             <Text style={styles.phoneText}>{item.contactPhone}</Text>
           </TouchableOpacity>
           <TouchableOpacity>
@@ -229,6 +235,7 @@ const styles = StyleSheet.create({
     height: 42,
     marginBottom: theme.spacing.sm,
     paddingHorizontal: theme.layout.screenPadding,
+    paddingBottom: 8,
   },
   filterChip: {
     paddingHorizontal: theme.spacing.lg,
@@ -259,17 +266,18 @@ const styles = StyleSheet.create({
   typeBadge: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full },
   typeBadgeText: { fontSize: theme.typography.fontSize.xs, fontWeight: '600' },
   meterRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
-  meterIcon: { fontSize: theme.typography.fontSize.md, marginRight: theme.spacing.sm },
+  meterIcon: { marginRight: theme.spacing.sm },
   meterLabel: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginRight: theme.spacing.sm, minWidth: 110 },
   meterBarBg: { flex: 1, height: 6, backgroundColor: COLORS.border, borderRadius: theme.borderRadius.full, overflow: 'hidden' },
   meterBar: { height: '100%', borderRadius: theme.borderRadius.full },
   criticalText: { fontSize: theme.typography.fontSize.xs, color: COLORS.severityRed, fontWeight: '600', marginLeft: theme.spacing.sm },
+  criticalTextContainer: { flexDirection: 'row', alignItems: 'center' },
   staffRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
   specialistChip: { backgroundColor: COLORS.primaryLight, paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full, marginLeft: theme.spacing.xs },
   specialistText: { fontSize: theme.typography.fontSize.xs, color: COLORS.primary, fontWeight: '500' },
   cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: theme.spacing.sm },
   phoneRow: { flexDirection: 'row', alignItems: 'center' },
-  phoneIcon: { fontSize: theme.typography.fontSize.md, marginRight: theme.spacing.xs },
+  phoneIcon: { marginRight: theme.spacing.xs },
   phoneText: { fontSize: theme.typography.fontSize.sm, color: COLORS.primary, fontWeight: '500' },
   detailsLink: { fontSize: theme.typography.fontSize.sm, color: COLORS.primary, fontWeight: '600' },
   emptyState: {
@@ -278,7 +286,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyIcon: {
-    fontSize: 64,
     marginBottom: theme.spacing.sm,
     opacity: 0.4,
   },

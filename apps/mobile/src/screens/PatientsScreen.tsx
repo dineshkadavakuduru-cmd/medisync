@@ -9,8 +9,10 @@ import {
   TextInput,
   FlatList,
   Modal,
+  Platform,
 } from 'react-native';
 import { COLORS, Patient as PatientType } from '@medisync/shared';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -105,11 +107,12 @@ export const PatientsScreen: React.FC = () => {
 
   const EmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>👥</Text>
+      <MaterialCommunityIcons name="account-group-outline" size={64} color={COLORS.textSecondary} style={styles.emptyIcon} />
       <Text style={styles.emptyTitle}>{t('patients.noPatientsFound')}</Text>
       <Text style={styles.emptySubtitle}>{t('patients.addFirstPatient')}</Text>
       <TouchableOpacity style={styles.emptyButton} onPress={openAddModal}>
-        <Text style={styles.emptyButtonText}>➕ {t('patients.addPatient')}</Text>
+        <MaterialCommunityIcons name="plus" size={20} color={COLORS.textOnPrimary} />
+        <Text style={styles.emptyButtonText}>{t('patients.addPatient')}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -134,7 +137,7 @@ export const PatientsScreen: React.FC = () => {
           onChangeText={setSearchQuery}
           placeholderTextColor={COLORS.textSecondary}
         />
-        <Text style={styles.searchIcon}>🔍</Text>
+        <MaterialCommunityIcons name="magnify" size={20} color={COLORS.textSecondary} style={styles.searchIcon} />
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
@@ -158,19 +161,19 @@ export const PatientsScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.patientCard} onPress={() => {}}>
+          <TouchableOpacity style={styles.patientCard} onPress={() => {}} activeOpacity={0.7}>
             <View style={styles.patientLeft}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
               </View>
               <View style={styles.patientInfo}>
-                <Text style={styles.patientName}>{item.name}</Text>
-                <Text style={styles.patientMeta}>
+                <Text style={styles.patientName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.patientMeta} numberOfLines={1}>
                   {item.age} yrs • {item.gender} • {item.village}
                 </Text>
               </View>
             </View>
-            <View style={styles.patientRight}>
+            <View style={styles.abhaBadge}>
               <Text style={styles.abhaLabel}>ABHA ID</Text>
               <Text style={styles.abhaId} numberOfLines={1}>{item.abhaId}</Text>
             </View>
@@ -184,7 +187,7 @@ export const PatientsScreen: React.FC = () => {
           <View style={styles.modalContent} onTouchStart={(e) => e.stopPropagation()}>
             <Text style={styles.modalTitle}>{t('patients.addPatient')}</Text>
             <TouchableOpacity onPress={() => setShowAddModal(false)}>
-              <Text style={styles.modalClose}>✕</Text>
+              <MaterialCommunityIcons name="close" size={24} color={COLORS.textSecondary} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
@@ -337,7 +340,6 @@ const styles = StyleSheet.create({
   searchIcon: {
     position: 'absolute',
     right: theme.layout.screenPadding + theme.spacing.lg,
-    fontSize: theme.typography.fontSize.lg,
   },
   filterScroll: {
     flexGrow: 0,
@@ -391,6 +393,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.md,
     flex: 1,
+    paddingRight: 10,
   },
   avatar: {
     width: 48,
@@ -406,6 +409,8 @@ const styles = StyleSheet.create({
     color: COLORS.primary,
   },
   patientInfo: {
+    flex: 1,
+    flexShrink: 1,
     gap: 2,
   },
   patientName: {
@@ -417,8 +422,14 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     color: COLORS.textSecondary,
   },
-  patientRight: {
+  abhaBadge: {
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
     alignItems: 'flex-end',
+    minWidth: 100,
+    maxWidth: 130,
   },
   abhaLabel: {
     fontSize: theme.typography.fontSize.xs,
@@ -430,7 +441,7 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.sm,
     fontWeight: theme.typography.fontWeight.medium,
     color: COLORS.textPrimary,
-    fontFamily: 'monospace',
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     maxWidth: 120,
   },
   emptyState: {
@@ -439,7 +450,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
   },
   emptyIcon: {
-    fontSize: 64,
     marginBottom: theme.spacing.sm,
     opacity: 0.4,
   },
@@ -460,6 +470,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     borderRadius: theme.borderRadius.md,
     marginTop: theme.spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
   },
   emptyButtonText: {
     color: COLORS.textOnPrimary,
@@ -483,10 +496,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.fontSize.xl,
     fontWeight: theme.typography.fontWeight.bold,
     color: COLORS.textPrimary,
-  },
-  modalClose: {
-    fontSize: theme.typography.fontSize.xl,
-    color: COLORS.textSecondary,
   },
   modalBody: {
     backgroundColor: COLORS.surface,
