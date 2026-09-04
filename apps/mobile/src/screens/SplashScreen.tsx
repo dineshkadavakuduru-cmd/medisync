@@ -41,7 +41,7 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#00695C" />
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
         <Image
           source={require('../../assets/medisync-logo.png')}
@@ -67,7 +67,7 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#00695C',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -85,7 +85,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
+    color: '#00695C',
     fontWeight: '500',
     letterSpacing: 0.5,
     textAlign: 'center',
@@ -98,16 +98,14 @@ const styles = StyleSheet.create({
   },
   powered: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.5)',
+    color: '#9E9E9E',
     letterSpacing: 0.3,
   },
   badge: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: '#00695C',
     paddingHorizontal: 20,
     paddingVertical: 6,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
   },
   badgeText: {
     color: '#FFFFFF',

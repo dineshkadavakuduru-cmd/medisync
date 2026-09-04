@@ -21,7 +21,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#00695C"
+      "backgroundColor": "#FFFFFF"
       },
       "package": "com.medisync.app"
     },
