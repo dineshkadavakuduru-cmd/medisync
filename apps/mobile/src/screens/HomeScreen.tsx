@@ -23,7 +23,7 @@ import { useApi } from '../hooks/useApi';
 import { useTranslation } from '../i18n';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useCountUp } from '../hooks/useCountUp';
-import { isDemoActive, toggleDemoMode } from '../services/demoMode';
+import { toggleDemoMode } from '../services/demoMode';
 
 const DEFAULT_STATS = {
   todaysReferrals: 14,
@@ -249,9 +249,6 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               </View>
             </View>
             <View style={styles.profileActions}>
-              <TouchableOpacity style={styles.roleSwitchBtn} onPress={() => { toggleDemoMode(); setShowProfileModal(false); }}>
-                <Text style={styles.roleSwitchText}>🎮 Toggle Demo Mode</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={styles.logoutBtn} onPress={() => setShowProfileModal(false)}>
                 <Text style={styles.logoutText}>Close Profile</Text>
               </TouchableOpacity>
@@ -338,8 +335,6 @@ const styles = StyleSheet.create({
   profileLabel: { fontSize: 14, color: COLORS.textSecondary },
   profileValue: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
   profileActions: { gap: 12 },
-  roleSwitchBtn: { backgroundColor: '#E0F2F1', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-  roleSwitchText: { color: COLORS.primary, fontWeight: '700', fontSize: 15 },
   logoutBtn: { backgroundColor: '#F5F5F5', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   logoutText: { color: COLORS.textSecondary, fontWeight: '600', fontSize: 15 },
 });
