@@ -7,7 +7,7 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/medisync-logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#00695C"
     },
