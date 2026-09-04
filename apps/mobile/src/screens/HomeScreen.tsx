@@ -141,7 +141,9 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             </View>
           </View>
 
-          <EmergencyBanner onPress={() => navigation.navigate('Emergency')} alertCount={stats.pendingHighRiskAlerts} />
+          <View style={styles.emergencyBannerWrap}>
+            <EmergencyBanner onPress={() => navigation.navigate('Emergency')} alertCount={stats.pendingHighRiskAlerts} />
+          </View>
 
           <View style={styles.statCardsRow}>
             <StatCard title={t('dashboard.todayReferrals')} value={animatedReferrals} trend={{ value: stats.referralTrend, direction: 'up' }} />
@@ -265,7 +267,7 @@ const { width, height } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scrollContent: { paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.layout.tabBarHeight + theme.spacing.lg, gap: 0 },
+  scrollContent: { paddingHorizontal: theme.layout.screenPadding, paddingTop: 8, paddingBottom: 120 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
   headerLeft: { flex: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
@@ -273,22 +275,26 @@ const styles = StyleSheet.create({
   headerDate: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginTop: 2 },
   avatar: { width: 40, height: 40, borderRadius: theme.borderRadius.full, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: COLORS.textOnPrimary, fontSize: theme.typography.fontSize.md, fontWeight: theme.typography.fontWeight.bold },
-  statCardsRow: { flexDirection: 'row', gap: theme.spacing.md },
-  section: { gap: theme.spacing.md },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 },
-  sectionTitle: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.semibold, color: COLORS.textPrimary, marginBottom: theme.spacing.sm },
+  emergencyBannerWrap: { marginBottom: 4 },
+  statCardsRow: { flexDirection: 'row', gap: 12, marginTop: 14, marginBottom: 6 },
+  section: { gap: theme.spacing.md, marginTop: 16, marginBottom: 4 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginTop: 20, marginBottom: 12, paddingHorizontal: 4 },
+  sectionTitle: { fontSize: 17, fontWeight: '700', color: COLORS.textPrimary },
   alertBadge: { backgroundColor: COLORS.emergency, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full },
   alertBadgeText: { color: COLORS.textOnPrimary, fontSize: theme.typography.fontSize.xs, fontWeight: theme.typography.fontWeight.semibold },
-  alertsList: { gap: theme.spacing.sm },
+  alertsList: { gap: 10 },
+  alertCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'flex-start', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1 },
   noAlerts: { color: COLORS.textSecondary, fontSize: theme.typography.fontSize.sm, textAlign: 'center', paddingVertical: theme.spacing.lg },
   comingSoon: { color: COLORS.textSecondary, fontSize: theme.typography.fontSize.sm, textAlign: 'center', paddingVertical: theme.spacing.lg },
-  horizontalScroll: { flexDirection: 'row' },
+  horizontalScroll: { flexDirection: 'row', marginTop: 8, marginBottom: 4 },
+  referralScrollContent: { paddingHorizontal: 4, gap: 12 },
   cardWrapper: { marginRight: theme.spacing.md, width: 280 },
   redCardWrapper: { marginRight: theme.spacing.md, width: 280, borderLeftWidth: 4, borderLeftColor: COLORS.severityRed },
+  queueCard: { backgroundColor: COLORS.primary, borderRadius: 16, padding: 20, marginTop: 16, marginBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   divider: { height: 1, backgroundColor: COLORS.border },
   sosFab: {
     position: 'absolute',
-    bottom: 74,
+    bottom: 80,
     right: 16,
     width: 52,
     height: 52,
@@ -297,7 +303,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 99,
-    elevation: 6,
+    elevation: 8,
   },
   sosFabInner: {
     width: 46,
