@@ -4,7 +4,6 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { NetworkBanner } from './src/components/NetworkBanner';
-import { DemoBadge } from './src/components/DemoBadge';
 
 const theme = {
   colors: {
@@ -25,7 +24,6 @@ export default function App() {
           <View style={styles.appShell}>
             <AppNavigator />
             <NetworkBanner />
-            <DemoBadge />
           </View>
         </View>
       </ErrorBoundary>
