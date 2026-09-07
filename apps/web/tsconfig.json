@@ -20,7 +20,7 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@medisync/shared": ["../../packages/shared/src"]
+      "@medisync/shared": ["./src/shared", "./src/shared/index.ts", "../../packages/shared/src"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
