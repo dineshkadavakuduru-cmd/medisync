@@ -31,13 +31,13 @@ export default function WelcomePage() {
             <a href="#features" className="text-sm font-medium hover:text-[#00695C] transition-colors" style={{ color: scrolled ? '#757575' : 'rgba(255,255,255,0.9)' }}>Features</a>
             <a href="#tech" className="text-sm font-medium hover:text-[#00695C] transition-colors" style={{ color: scrolled ? '#757575' : 'rgba(255,255,255,0.9)' }}>Tech Stack</a>
             <a href="#impact" className="text-sm font-medium hover:text-[#00695C] transition-colors" style={{ color: scrolled ? '#757575' : 'rgba(255,255,255,0.9)' }}>Impact</a>
-            <Link href="/" className="px-4 py-2 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
-              Dashboard →
+            <Link href="/login" className="px-4 py-2 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
+              Sign In / Select Role →
             </Link>
           </div>
           <div className="md:hidden">
-            <Link href="/" className="px-3 py-1.5 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
-              Launch App →
+            <Link href="/login" className="px-3 py-1.5 bg-white text-[#00695C] rounded-lg text-sm font-semibold hover:bg-gray-50 transition-colors shadow-sm">
+              Sign In →
             </Link>
           </div>
         </div>
@@ -57,8 +57,8 @@ export default function WelcomePage() {
             A unified platform connecting Sub-Centres, PHCs, CHCs & District Hospitals — powered by AI triage, real-time monitoring, and offline-first design
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/" className="px-8 py-3.5 bg-white text-[#00695C] rounded-xl text-base font-bold hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl">
-              Open Dashboard →
+            <Link href="/login" className="px-8 py-3.5 bg-white text-[#00695C] rounded-xl text-base font-bold hover:bg-gray-50 transition-all shadow-lg hover:shadow-xl">
+              Sign In / Select Role →
             </Link>
             <a href="https://sih.gov.in" target="_blank" rel="noopener noreferrer" className="px-8 py-3.5 border-2 border-white text-white rounded-xl text-base font-bold hover:bg-white/10 transition-all">
               View Problem Statement ↗
