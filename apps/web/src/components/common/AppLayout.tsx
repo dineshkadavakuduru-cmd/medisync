@@ -6,12 +6,14 @@ import { Sidebar } from '@/components/common/Sidebar';
 import { Header } from '@/components/common/Header';
 import { ToastContainer } from '@/components/common/Toast';
 import { AuthProvider } from '@/context/AuthContext';
+import { SplashScreen } from '@/components/common/SplashScreen';
 
 const NO_SIDEBAR_ROUTES = ['/welcome', '/login'];
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
+      <SplashScreen />
       <AppLayoutInner>{children}</AppLayoutInner>
     </AuthProvider>
   );
@@ -57,3 +59,4 @@ function AppLayoutInner({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,10 +23,24 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"],
-      "@medisync/shared": ["./src/shared", "./src/shared/index.ts", "../../packages/shared/src"]
+      "@/*": [
+        "./src/*"
+      ],
+      "@medisync/shared": [
+        "./src/shared",
+        "./src/shared/index.ts",
+        "../../packages/shared/src"
+      ]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    "next-env.d.ts",
+    "apps/mobile/dist/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
