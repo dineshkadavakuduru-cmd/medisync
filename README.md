@@ -87,6 +87,27 @@ npm run dev
 
 Web app runs on http://localhost:3000
 
+### Deploy the Bottom-Tab App to Vercel
+
+The phone-style MediSync UI is `apps/mobile`, not the separate Next.js district
+dashboard in `apps/web`. For the phone-style production site, use:
+
+- Root Directory: repository root (leave blank, not `apps/web`).
+- Framework Preset: Other.
+- Build Command: `npm run build --workspace=apps/mobile`.
+- Output Directory: `apps/mobile/dist`.
+- Install Command: `npm ci` from the repository root.
+
+The root `vercel.json` selects this static Expo web export. Clear conflicting
+dashboard overrides in Vercel and create a new deployment after changing the
+settings; an existing deployment will not change when local files change.
+Deploy `apps/web` as a separate Next.js project if the district dashboard is also
+needed. Its build output is `.next`, not the mobile export.
+
+Set `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_ML_URL` to public HTTPS services before
+building if live data is required. Without reachable services, the mobile app's
+existing fallback displays sample data, not live healthcare records.
+
 ## Environment Variables
 
 ### Server (.env)

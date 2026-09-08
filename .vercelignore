@@ -1,0 +1,13 @@
+.git
+.gstack
+**/.env
+**/.env.*
+**/node_modules
+**/.expo
+**/.next
+**/dist
+**/demo-videos
+**/*.mp4
+**/*.webm
+**/*.log
+medisync-demo.html

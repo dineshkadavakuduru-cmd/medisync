@@ -1,11 +1,9 @@
-import React, { useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTranslation } from '../i18n';
-
-const { width } = Dimensions.get('window');
 
 const SLIDES = [
   {
@@ -31,7 +29,12 @@ const SLIDES = [
 export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [width, setWidth] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ x: currentIndex * width, animated: false });
+  }, [width]);
 
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
@@ -61,12 +64,13 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
   };
 
   const handleScroll = (event: any) => {
+    if (!width) return;
     const index = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentIndex(index);
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
       <TouchableOpacity style={styles.skip} onPress={skip}>
         <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
       </TouchableOpacity>
@@ -79,7 +83,7 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         onMomentumScrollEnd={handleScroll}
         contentContainerStyle={styles.scrollContent}
       >
-        {SLIDES.map((slide, index) => (
+        {width > 0 && SLIDES.map((slide, index) => (
           <View key={index} style={[styles.slide, { width }]}>
             <Text style={styles.icon}>{slide.icon}</Text>
             <Text style={styles.title}>{t(slide.titleKey)}</Text>
@@ -124,7 +128,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   slide: {
-    flex: 1,
+    flexShrink: 0,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: theme.layout.screenPadding,

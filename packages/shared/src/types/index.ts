@@ -245,3 +245,35 @@ export interface EmergencyStats {
   ambulancesAvailable: number;
   ambulancesDispatched: number;
 }
+
+// Diagnostic types
+export type DiagnosticPriority = 'ROUTINE' | 'URGENT' | 'STAT';
+export type DiagnosticStatus = 'ORDERED' | 'SAMPLE_COLLECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type TestFlag = 'NORMAL' | 'ABNORMAL' | 'CRITICAL';
+
+export interface TestResult {
+  id: string;
+  testName: string;
+  testCode: string;
+  value: string;
+  unit: string;
+  flag: TestFlag;
+  referenceRange?: string;
+}
+
+export interface DiagnosticOrder {
+  id: string;
+  patientId: string;
+  patientName: string;
+  facilityId: string;
+  facilityName: string;
+  triageId?: string;
+  referralId?: string;
+  tests: string[];
+  priority: DiagnosticPriority;
+  status: DiagnosticStatus;
+  orderedBy: string;
+  results: TestResult[];
+  notes?: string;
+  createdAt: string;
+}

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export type UserRole = 'DOCTOR' | 'ASHA' | 'PATIENT' | 'ADMIN';
+export type UserRole = 'DOCTOR' | 'ASHA' | 'PATIENT' | 'ADMIN' | 'PHARMACIST';
 
 export interface Persona {
   id: string;
@@ -78,6 +78,21 @@ export const PERSONAS: Record<UserRole, Persona> = {
     accent: '#C62828',
     greetingTitle: 'District Command Centre 🏛️',
     badgeRole: 'District Admin',
+  },
+  PHARMACIST: {
+    id: 'pharmacist',
+    role: 'PHARMACIST',
+    name: 'Rajesh Patil',
+    initials: 'RP',
+    title: 'Pharmacist',
+    facility: 'Mulshi PHC (Pune)',
+    staffId: 'MH-PUN-PHA-001',
+    shiftOrAbha: 'Morning Shift (08:00 - 16:00)',
+    syncStatus: '✓ 100% Synced',
+    avatarColor: '#FF6F00',
+    accent: '#FF6F00',
+    greetingTitle: 'Good Morning, Rajesh 👨‍🔬',
+    badgeRole: 'Pharmacist',
   },
 };
 

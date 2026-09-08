@@ -1,169 +1,177 @@
-import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  ScrollView,
-  StyleSheet,
-  SafeAreaView,
-  TouchableOpacity,
-} from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { useTranslation } from '../i18n';
-
-interface SessionDetail {
-  id: string;
-  patientName: string;
-  doctorName: string;
-  scheduledTime: string;
-  status: string;
-  meetingLink: string;
-}
+import { teleconsultClient, TeleconsultRole, TeleconsultSession, TeleconsultStatus } from '../services/teleconsultClient';
+import { TeleconsultMeeting } from '../components/TeleconsultMeeting';
+import { teleconsultCopy as copy } from '../i18n/translations/teleconsult';
 
 export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
-  const { t } = useTranslation();
-  const { sessionId } = route.params;
-  const [session, setSession] = useState<SessionDetail | null>(null);
-  const [callActive, setCallActive] = useState(false);
-  const [callDuration, setCallDuration] = useState(0);
+  const sessionId = route.params?.sessionId as string;
+  const [session, setSession] = useState<TeleconsultSession | null>(null);
+  const [role, setRole] = useState<TeleconsultRole>('patient');
+  const [meetingOpen, setMeetingOpen] = useState(false);
+  const [joined, setJoined] = useState(false);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const alive = useRef(false);
+  const operation = useRef(false);
+  const loadVersion = useRef(0);
+  const meetingGeneration = useRef(0);
+  const joinedGeneration = useRef<number | null>(null);
 
-  useEffect(() => {
-    loadSession();
-  }, []);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (callActive) {
-      interval = setInterval(() => setCallDuration((d) => d + 1), 1000);
-    }
-    return () => clearInterval(interval);
-  }, [callActive]);
-
-  const loadSession = async () => {
+  const load = async () => {
+    const version = ++loadVersion.current;
     try {
-      const res = await fetch(`http://localhost:3001/api/teleconsult/sessions/${sessionId}`);
-      const data = await res.json();
-      if (data.success) setSession(data.data);
+      const data = await teleconsultClient.get(sessionId);
+      if (alive.current && version === loadVersion.current) {
+        setSession(data);
+        setError('');
+        if (!['ACCEPTED', 'IN_PROGRESS'].includes(data.status)) closeMeeting();
+      }
     } catch (e) {
-      console.error(e);
+      if (alive.current && version === loadVersion.current) setError(e instanceof Error ? e.message : copy.error);
     }
   };
 
-  const handleStartCall = async () => {
-    setCallActive(true);
-    await fetch(`http://localhost:3001/api/teleconsult/sessions/${sessionId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'IN_PROGRESS' }),
-    });
+  const closeMeeting = () => {
+    meetingGeneration.current += 1;
+    joinedGeneration.current = null;
+    setMeetingOpen(false);
+    setJoined(false);
   };
 
-  const handleEndCall = async () => {
-    setCallActive(false);
-    await fetch(`http://localhost:3001/api/teleconsult/sessions/${sessionId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'COMPLETED' }),
-    });
-    navigation.goBack();
+  useEffect(() => {
+    alive.current = true;
+    setSession(null);
+    closeMeeting();
+    void load();
+    const interval = setInterval(() => { if (!operation.current) void load(); }, 10000);
+    const unsubscribe = navigation.addListener?.('blur', closeMeeting);
+    return () => {
+      alive.current = false;
+      loadVersion.current += 1;
+      meetingGeneration.current += 1;
+      clearInterval(interval);
+      unsubscribe?.();
+    };
+  }, [sessionId]);
+
+  const update = async (status: TeleconsultStatus, generation?: number) => {
+    if (operation.current || !alive.current) return;
+    operation.current = true;
+    const version = ++loadVersion.current;
+    setBusy(true);
+    setError('');
+    try {
+      // Re-read before acting: another participant may already have advanced the session.
+      const current = await teleconsultClient.get(sessionId);
+      if (!alive.current || version !== loadVersion.current ||
+          (generation !== undefined && generation !== meetingGeneration.current)) return;
+      const next = status === 'IN_PROGRESS' && current.status === 'IN_PROGRESS'
+        ? current : await teleconsultClient.update(sessionId, status);
+      if (!alive.current || version !== loadVersion.current) return;
+      setSession(next);
+      if (status === 'IN_PROGRESS') setJoined(true);
+      if (['COMPLETED', 'CANCELLED', 'DECLINED'].includes(status)) closeMeeting();
+    } catch (e) {
+      if (alive.current && version === loadVersion.current) {
+        setError(e instanceof Error ? e.message : copy.error);
+        if (generation !== undefined) joinedGeneration.current = null;
+      }
+    } finally {
+      operation.current = false;
+      if (alive.current) setBusy(false);
+    }
   };
 
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  const generation = meetingGeneration.current;
+  const onJoined = () => {
+    if (!alive.current || !meetingOpen || generation !== meetingGeneration.current ||
+        joinedGeneration.current === generation || operation.current) return;
+    joinedGeneration.current = generation;
+    void update('IN_PROGRESS', generation);
+  };
+  const onLeft = () => {
+    if (!alive.current || generation !== meetingGeneration.current) return;
+    joinedGeneration.current = null;
+    setJoined(false);
+    // No status mutation: the other participant may still be in the room.
   };
 
-  if (!session) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loading}>Loading session...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {callActive ? (
-          <View style={styles.callContainer}>
-            <View style={styles.callHeader}>
-              <Text style={styles.callTimer}>{formatDuration(callDuration)}</Text>
-              <Text style={styles.callStatus}>Call in progress</Text>
-            </View>
-
-            <View style={styles.videoPlaceholder}>
-              <Text style={styles.videoIcon}>📹</Text>
-              <Text style={styles.videoText}>Video consultation with Dr. {session.doctorName}</Text>
-              <Text style={styles.videoSubtext}>Patient: {session.patientName}</Text>
-            </View>
-
-            <View style={styles.callControls}>
-              <TouchableOpacity style={styles.controlButton}>
-                <Text style={styles.controlIcon}>🎤</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.controlButton, styles.endCallButton]} onPress={handleEndCall}>
-                <Text style={styles.controlIcon}>📞</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.controlButton}>
-                <Text style={styles.controlIcon}>📷</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.preCallContainer}>
-            <View style={styles.sessionCard}>
-              <Text style={styles.sessionLabel}>Patient</Text>
-              <Text style={styles.sessionValue}>{session.patientName}</Text>
-            </View>
-            <View style={styles.sessionCard}>
-              <Text style={styles.sessionLabel}>Doctor</Text>
-              <Text style={styles.sessionValue}>Dr. {session.doctorName}</Text>
-            </View>
-            <View style={styles.sessionCard}>
-              <Text style={styles.sessionLabel}>Scheduled</Text>
-              <Text style={styles.sessionValue}>
-                {new Date(session.scheduledTime).toLocaleString()}
-              </Text>
-            </View>
-            <View style={styles.sessionCard}>
-              <Text style={styles.sessionLabel}>Status</Text>
-              <Text style={[styles.sessionValue, { color: COLORS.primary }]}>{session.status}</Text>
-            </View>
-
-            <TouchableOpacity style={styles.startCallButton} onPress={handleStartCall}>
-              <Text style={styles.startCallText}>Start Consultation</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </ScrollView>
-    </SafeAreaView>
+  const button = (label: string, action: () => void, secondary = false) => (
+    <TouchableOpacity accessibilityRole="button" disabled={busy}
+      style={[styles.button, secondary && styles.secondary, busy && styles.disabled]} onPress={action}>
+      <Text style={[styles.buttonText, secondary && styles.secondaryText]}>{label}</Text>
+    </TouchableOpacity>
   );
+
+  return <SafeAreaView style={styles.container}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.title}>{copy.title}</Text>
+      {teleconsultClient.isDemo && <Text style={styles.notice}>{copy.demo}</Text>}
+      <Text style={styles.notice}>{copy.roles}</Text>
+      <View style={styles.row}>
+        {(['patient', 'doctor'] as const).map((value) => <TouchableOpacity key={value}
+          accessibilityRole="button" accessibilityState={{ selected: role === value, disabled: meetingOpen || busy }}
+          disabled={meetingOpen || busy} onPress={() => setRole(value)}
+          style={[styles.role, role === value && styles.selected]}>
+          <Text style={styles.body}>{copy[value]} (demo)</Text>
+        </TouchableOpacity>)}
+      </View>
+      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {button(copy.retry, () => { if (!operation.current) void load(); }, true)}
+      {!session ? <Text style={styles.body}>{error ? copy.error : copy.loading}</Text> : <>
+        <View style={styles.card}>
+          <Text style={styles.title}>{session.patientName}</Text>
+          <Text style={styles.body}>{copy.doctor}: {session.doctorName}</Text>
+          <Text style={styles.body}>{copy.scheduled}: {new Date(session.scheduledTime).toLocaleString()}</Text>
+          <Text style={styles.body}>{copy.status}: {copy.statuses[session.status]}</Text>
+        </View>
+        {session.status === 'REQUESTED' && <>
+          <Text style={styles.body}>{copy.waiting}</Text>
+          {role === 'doctor' && <>
+            {button(copy.accept, () => void update('ACCEPTED'))}
+            {button(copy.decline, () => void update('DECLINED'), true)}
+          </>}
+        </>}
+        {['ACCEPTED', 'IN_PROGRESS'].includes(session.status) && <>
+          <Text style={styles.notice}>{copy.privacy}</Text>
+          {!meetingOpen ? button(copy.join, () => {
+            meetingGeneration.current += 1;
+            joinedGeneration.current = null;
+            setMeetingOpen(true);
+          }) : <>
+            <TeleconsultMeeting meetingLink={session.meetingLink} role={role} onJoined={onJoined} onLeft={onLeft} />
+            <Text style={styles.body}>{copy.externalHelp}</Text>
+            {!joined && button(copy.confirmJoined, () => void update('IN_PROGRESS', generation), true)}
+            {button(copy.leave, closeMeeting, true)}
+          </>}
+        </>}
+        {session.status === 'IN_PROGRESS' && role === 'doctor' && <>
+          <Text style={styles.notice}>{copy.completeHelp}</Text>
+          {button(copy.complete, () => void update('COMPLETED'))}
+        </>}
+        {['REQUESTED', 'ACCEPTED'].includes(session.status) && button(copy.cancel, () => void update('CANCELLED'), true)}
+      </>}
+      {button(copy.back, () => navigation.goBack(), true)}
+    </ScrollView>
+  </SafeAreaView>;
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loading: { color: COLORS.textSecondary },
-  scrollContent: { paddingHorizontal: theme.layout.screenPadding, paddingBottom: theme.layout.tabBarHeight + theme.spacing.lg, gap: theme.spacing.lg },
-  callContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: theme.spacing.xl },
-  callHeader: { alignItems: 'center', marginBottom: theme.spacing.xl },
-  callTimer: { fontSize: theme.typography.fontSize['3xl'], fontWeight: theme.typography.fontWeight.bold, color: COLORS.textPrimary },
-  callStatus: { fontSize: theme.typography.fontSize.md, color: COLORS.success, marginTop: theme.spacing.xs },
-  videoPlaceholder: { width: '100%', height: 300, backgroundColor: '#1a1a1a', borderRadius: theme.borderRadius.lg, alignItems: 'center', justifyContent: 'center', marginBottom: theme.spacing.xl },
-  videoIcon: { fontSize: 64, marginBottom: theme.spacing.md },
-  videoText: { color: '#fff', fontSize: theme.typography.fontSize.lg, fontWeight: '600' },
-  videoSubtext: { color: '#aaa', fontSize: theme.typography.fontSize.sm, marginTop: theme.spacing.xs },
-  callControls: { flexDirection: 'row', gap: theme.spacing.lg },
-  controlButton: { width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.surface, alignItems: 'center', justifyContent: 'center', ...theme.shadows.md },
-  endCallButton: { backgroundColor: COLORS.danger },
-  controlIcon: { fontSize: 24 },
-  preCallContainer: { gap: theme.spacing.md },
-  sessionCard: { backgroundColor: COLORS.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.md, ...theme.shadows.sm },
-  sessionLabel: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginBottom: 2 },
-  sessionValue: { fontSize: theme.typography.fontSize.lg, fontWeight: '600', color: COLORS.textPrimary },
-  startCallButton: { backgroundColor: COLORS.success, borderRadius: theme.borderRadius.md, paddingVertical: theme.spacing.lg, alignItems: 'center', marginTop: theme.spacing.lg },
-  startCallText: { color: COLORS.textOnPrimary, fontSize: theme.typography.fontSize.lg, fontWeight: '700' },
+  content: { padding: theme.layout.screenPadding, paddingBottom: theme.layout.tabBarHeight + 24, gap: 16 },
+  title: { fontSize: 22, fontWeight: '700', color: COLORS.textPrimary },
+  body: { color: COLORS.textPrimary, fontSize: 15, lineHeight: 22 },
+  notice: { backgroundColor: '#EAF3F2', color: '#234B47', padding: 14, borderRadius: 10, lineHeight: 21 },
+  card: { backgroundColor: COLORS.surface, padding: 16, borderRadius: 12, gap: 8 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  role: { borderWidth: 1, borderColor: COLORS.textSecondary, padding: 12, borderRadius: 10 },
+  selected: { borderColor: COLORS.primary, backgroundColor: '#D7EEEA', borderWidth: 2 },
+  button: { backgroundColor: COLORS.primary, padding: 16, borderRadius: 10, alignItems: 'center' },
+  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600', textAlign: 'center' },
+  secondary: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary },
+  secondaryText: { color: COLORS.primary }, disabled: { opacity: 0.5 },
+  error: { color: COLORS.danger, lineHeight: 22 },
 });

@@ -13,6 +13,8 @@ import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
 import { useTranslation } from '../i18n';
+import { useIsFocused } from '@react-navigation/native';
+import { VitalsMonitor } from '../components/VitalsMonitor';
 
 const STATUS_FLOW = ['INITIATED', 'ACKNOWLEDGED', 'AMBULANCE_DISPATCHED', 'AMBULANCE_EN_ROUTE', 'PATIENT_PICKED_UP', 'EN_ROUTE_TO_HOSPITAL', 'ARRIVED', 'UNDER_TREATMENT', 'RESOLVED'];
 const LEVEL_COLORS: Record<string, string> = { LEVEL_1: COLORS.emergency, LEVEL_2: COLORS.warning, LEVEL_3: COLORS.info };
@@ -23,7 +25,8 @@ interface EmergencyDetailScreenProps {
 }
 
 export const EmergencyDetailScreen: React.FC<EmergencyDetailScreenProps> = ({ navigation, route }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const isFocused = useIsFocused();
   const { emergencyId } = route.params;
   const [emergency, setEmergency] = useState<any>(null);
   const [timeline, setTimeline] = useState<any[]>([]);
@@ -164,6 +167,8 @@ export const EmergencyDetailScreen: React.FC<EmergencyDetailScreenProps> = ({ na
             {emergency.estimatedArrivalMinutes && <Text style={styles.infoText}>⏱ {t('emergency.eta')}: {emergency.estimatedArrivalMinutes} {t('emergency.minutes')}</Text>}
           </View>
         </View>
+
+        <VitalsMonitor emergencyId={emergencyId} status={emergency.status} language={language} active={isFocused} />
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('emergency.recentHistory')}</Text>

@@ -1,0 +1,27 @@
+// Feature-local copy; no changes to the shared translation registry are needed.
+export const teleconsultCopy = {
+  title: 'Teleconsultation', subtitle: 'Remote specialist consultations',
+  demo: 'Local demo: sessions are saved only on this device/browser, not synced between devices. Video requires internet and uses real Jitsi, not simulated video.',
+  roles: 'Role simulation only, not authentication. This demo does not enforce clinician permissions.',
+  privacy: 'Public Jitsi demo: do not share patient names, records or other sensitive information. Only a random room and a generic participant label are sent by this app. Anyone with the link can join. The first participant may need to sign in with Jitsi to start the room.',
+  patient: 'Patient', doctor: 'Clinician', loading: 'Loading sessions...',
+  retry: 'Refresh', empty: 'No consultations yet.', create: 'Create local demo request',
+  accept: 'Accept request (clinician simulation)', decline: 'Decline request', cancel: 'Cancel consultation',
+  join: 'Join real Jitsi meeting', complete: 'Mark consultation completed',
+  completeHelp: 'Completing closes the consultation record for both roles, not the remote room. Use Jitsi hang up to leave. Leaving or navigating away never completes the record automatically.',
+  waiting: 'Waiting for clinician acceptance. Switch the labelled demo role to accept this request.',
+  scheduled: 'Scheduled', status: 'Status', back: 'Back',
+  external: 'Open same meeting in browser',
+  native: 'Expo Go cannot embed the Jitsi native SDK. Open the real meeting in your browser or installed Jitsi app; microphone, camera and hang-up controls live there. Native embedding requires a custom development build, not Expo Go.',
+  externalHelp: 'Browser/app joining cannot be detected here. After you actually join, return and confirm below. Opening a link alone does not mark the call in progress.',
+  confirmJoined: 'I joined the external meeting',
+  connecting: 'Loading Jitsi. If embedding or media permissions are blocked, use the browser link below.',
+  unavailable: 'Jitsi could not be embedded. Use the same meeting link below; camera and microphone permissions are managed by Jitsi.',
+  connected: 'Joined Jitsi meeting', left: 'You left the meeting. The consultation record remains open.',
+  leave: 'Close embedded meeting (does not complete consultation)',
+  error: 'Unable to update or load the consultation.',
+  statuses: {
+    REQUESTED: 'Requested', ACCEPTED: 'Accepted', IN_PROGRESS: 'In progress',
+    COMPLETED: 'Completed', DECLINED: 'Declined', CANCELLED: 'Cancelled',
+  },
+};

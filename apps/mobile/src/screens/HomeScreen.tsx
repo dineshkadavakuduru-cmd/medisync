@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Dimensions,
   Modal,
 } from 'react-native';
 import { COLORS, TriageSeverity, Alert } from '@medisync/shared';
@@ -167,39 +166,6 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               >
                 <Text style={styles.avatarText}>{persona.initials}</Text>
               </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Persona Role Pill Bar */}
-          <View style={styles.personaBar}>
-            <Text style={styles.personaBarLabel}>Active View:</Text>
-            <View style={styles.personaPillsRow}>
-              {(['DOCTOR', 'ASHA', 'PATIENT', 'ADMIN'] as UserRole[]).map((r) => {
-                const isActive = persona.role === r;
-                return (
-                  <TouchableOpacity
-                    key={r}
-                    onPress={() => handleRoleSelect(r)}
-                    style={[
-                      styles.personaPill,
-                      isActive && { backgroundColor: PERSONAS[r].accent, borderColor: PERSONAS[r].accent },
-                    ]}
-                    activeOpacity={0.8}
-                  >
-                    <Text
-                      style={[
-                        styles.personaPillText,
-                        isActive && { color: '#FFFFFF', fontWeight: '700' },
-                      ]}
-                    >
-                      {r === 'DOCTOR' && '👨‍⚕️ Doc'}
-                      {r === 'ASHA' && '👩‍⚕️ ASHA'}
-                      {r === 'PATIENT' && '👨‍🌾 Citizen'}
-                      {r === 'ADMIN' && '🏛️ Admin'}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
             </View>
           </View>
 
@@ -427,45 +393,6 @@ const styles = StyleSheet.create({
   headerDate: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginTop: 2 },
   avatar: { width: 40, height: 40, borderRadius: theme.borderRadius.full, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: COLORS.textOnPrimary, fontSize: theme.typography.fontSize.md, fontWeight: theme.typography.fontWeight.bold },
-  personaBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    marginTop: 4,
-    marginBottom: 8,
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  personaBarLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#757575',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  personaPillsRow: {
-    flexDirection: 'row',
-    flex: 1,
-    gap: 6,
-    justifyContent: 'space-between',
-  },
-  personaPill: {
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#F5F5F5',
-  },
-  personaPillText: {
-    fontSize: 11,
-    color: '#424242',
-    fontWeight: '600',
-  },
   emergencyBannerWrap: { marginBottom: 4 },
   statCardsRow: { flexDirection: 'row', gap: 12, marginTop: 14, marginBottom: 6 },
   section: { gap: theme.spacing.md, marginTop: 16, marginBottom: 4 },

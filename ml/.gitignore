@@ -1,0 +1,5 @@
+.test-deps/
+.pytest-temp/
+__pycache__/
+models/bed_model.pt
+models/bed_model_metadata.json

@@ -1,4 +1,3 @@
 {
-  "buildCommand": "npm run build --prefix ../mobile",
-  "outputDirectory": "apps/mobile/dist"
+  "framework": "nextjs"
 }

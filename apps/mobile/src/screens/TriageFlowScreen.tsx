@@ -13,9 +13,15 @@ import { COLORS, TriageSeverity, FacilityType } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityBadge } from '../components/SeverityBadge';
 import { api } from '../services/api';
+import { useApi } from '../hooks/useApi';
 import { useTranslation } from '../i18n';
 import { speak, stopSpeaking } from '../services/voiceService';
 import { isDemoActive } from '../services/demoMode';
+import { VoiceInputButton } from '../components/VoiceInputButton';
+import { getAllSymptoms } from '../services/triageService';
+import { getRecommendedDiagnostics } from '../services/triageService';
+import { syncService } from '../services/syncService';
+import { getActivePersona } from '../services/personas';
 
 type Step = 'select' | 'symptoms' | 'vitals' | 'result';
 
@@ -112,6 +118,37 @@ export const TriageFlowScreen: React.FC = () => {
       }
       const response = await api.submitTriage(body);
       setResult(response.data);
+
+      // Auto-create diagnostic order for RED/YELLOW severity
+      if (response.data && (response.data.severity === 'RED' || response.data.severity === 'YELLOW')) {
+        const recommendedTests = getRecommendedDiagnostics(selectedSymptoms);
+        if (recommendedTests.length > 0) {
+          const persona = getActivePersona();
+          const orderData = {
+            patientId: patientId || 'patient-1',
+            facilityId: 'facility-1',
+            triageId: response.data.id,
+            tests: recommendedTests,
+            priority: response.data.severity === 'RED' ? 'STAT' : 'URGENT',
+            orderedBy: persona.name,
+            notes: `Auto-generated from triage ${response.data.id}`,
+          };
+
+          if (syncService.isOnline()) {
+            try {
+              await api.createDiagnosticsOrder(orderData);
+            } catch (e) {
+              console.error('Failed to create diagnostic order:', e);
+            }
+          } else {
+            await syncService.enqueue({
+              type: 'CREATE_DIAGNOSTIC_ORDER',
+              payload: orderData,
+              timestamp: Date.now(),
+            });
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -240,7 +277,13 @@ export const TriageFlowScreen: React.FC = () => {
       </ScrollView>
 
       <View style={styles.voiceRow}>
-        {/* VoiceInputButton would go here */}
+        <VoiceInputButton
+          language={language}
+          catalogue={getAllSymptoms()}
+          onResult={result => {
+            setSelectedSymptoms(prev => [...new Set([...prev, ...result.recognizedIds])]);
+          }}
+        />
       </View>
 
       <TextInput

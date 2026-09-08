@@ -6,7 +6,7 @@ const { width } = Dimensions.get('window');
 
 export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.85)).current;
+  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     Animated.parallel([
@@ -34,22 +34,20 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       } catch (e) {
         navigation.replace('MainTabs');
       }
-    }, 2400);
+    }, 2500);
 
     return () => clearTimeout(timer);
   }, []);
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#00695C" />
-      <Animated.View style={[styles.cardWrapper, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
-        <View style={styles.logoCard}>
-          <Image
-            source={require('../../assets/medisync-logo.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-        </View>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <Animated.View style={[styles.logoContainer, { opacity: fadeAnim, transform: [{ scale: scaleAnim }] }]}>
+        <Image
+          source={require('../../assets/medisync-logo.png')}
+          style={styles.logo}
+          resizeMode="contain"
+        />
       </Animated.View>
 
       <Animated.View style={[styles.taglineContainer, { opacity: fadeAnim }]}>
@@ -69,42 +67,26 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#00695C',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cardWrapper: {
+  logoContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  logoCard: {
-    width: width * 0.56,
-    height: width * 0.56,
-    maxWidth: 240,
-    maxHeight: 240,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 8,
   },
   logo: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 16,
+    width: Math.min(width * 0.55, 240),
+    height: Math.min(width * 0.55, 240),
+    borderRadius: 20,
   },
   taglineContainer: {
-    marginTop: 26,
+    marginTop: 24,
   },
   tagline: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '600',
+    fontSize: 15,
+    color: '#00695C',
+    fontWeight: '500',
     letterSpacing: 0.5,
     textAlign: 'center',
   },
@@ -116,16 +98,14 @@ const styles = StyleSheet.create({
   },
   powered: {
     fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.65)',
+    color: '#9E9E9E',
     letterSpacing: 0.3,
   },
   badge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    paddingHorizontal: 22,
+    backgroundColor: '#00695C',
+    paddingHorizontal: 20,
     paddingVertical: 6,
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.25)',
   },
   badgeText: {
     color: '#FFFFFF',

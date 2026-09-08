@@ -1,7 +1,23 @@
 import { TeleconsultSession, TeleconsultStatus, Doctor } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 
-const sessions: Map<string, TeleconsultSession> = new Map();
+// Single-process demo persistence. Production needs a transactional shared database.
+const storePath = resolve(process.env.TELECONSULT_STORE_PATH || 'data/teleconsult-sessions.json');
+const saved: TeleconsultSession[] = existsSync(storePath) ? JSON.parse(readFileSync(storePath, 'utf8')) : [];
+const sessions = new Map<string, TeleconsultSession>(saved.map((session) => [session.id, session]));
+
+function persist(session: TeleconsultSession): void {
+  const next = new Map(sessions);
+  next.set(session.id, session);
+  mkdirSync(dirname(storePath), { recursive: true });
+  const temporary = `${storePath}.${process.pid}.tmp`;
+  writeFileSync(temporary, JSON.stringify([...next.values()]), { mode: 0o600 });
+  renameSync(temporary, storePath);
+  sessions.set(session.id, session);
+}
 
 const DOCTORS: Doctor[] = [
   { id: 'doc-1', name: 'डॉ. शर्मा', facilityId: 'facility-2', specialty: 'General Physician', languages: ['en', 'hi', 'mr'] },
@@ -19,18 +35,8 @@ const VALID_TRANSITIONS: Record<TeleconsultStatus, TeleconsultStatus[]> = {
   CANCELLED: [],
 };
 
-function generateId(): string {
-  return `tc-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
-function generateMeetingLink(sessionId: string): string {
-  const token = Buffer.from(`${sessionId}-${Date.now()}`).toString('base64url').substring(0, 24);
-  return `https://meet.medisync.plus/room/${sessionId}?token=${token}`;
-}
-
-function getFacilityName(facilityId: string): string {
-  const facility = mockFacilities.find((f) => f.id === facilityId);
-  return facility?.name || facilityId;
+export function generateMeetingLink(): string {
+  return `https://meet.jit.si/medisync-${randomBytes(24).toString('hex')}`;
 }
 
 export function getDoctors(): Doctor[] {
@@ -54,10 +60,15 @@ export function createSession(data: {
   scheduledTime: string;
 }): TeleconsultSession {
   const doctor = getDoctorById(data.doctorId);
-  const facility = mockFacilities.find((f) => f.id === data.fromFacilityId);
+  if (!doctor || !mockFacilities.some((f) => f.id === data.fromFacilityId)) {
+    throw new Error('Unknown doctor or facility');
+  }
+  if (!data.patientName?.trim() || !Number.isFinite(Date.parse(data.scheduledTime))) {
+    throw new Error('Patient name and valid scheduled time are required');
+  }
 
   const session: TeleconsultSession = {
-    id: generateId(),
+    id: `tc-${randomUUID()}`,
     patientId: data.patientId,
     patientName: data.patientName,
     fromFacilityId: data.fromFacilityId,
@@ -70,17 +81,17 @@ export function createSession(data: {
     createdAt: new Date().toISOString(),
   };
 
-  session.meetingLink = generateMeetingLink(session.id);
-  sessions.set(session.id, session);
-  return session;
+  persist(session);
+  return { ...session };
 }
 
 export function getSession(id: string): TeleconsultSession | undefined {
-  return sessions.get(id);
+  const session = sessions.get(id);
+  return session ? { ...session } : undefined;
 }
 
 export function getAllSessions(): TeleconsultSession[] {
-  return Array.from(sessions.values()).sort(
+  return Array.from(sessions.values(), (session) => ({ ...session })).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
@@ -95,18 +106,17 @@ export function getSessionsByFacility(facilityId: string): TeleconsultSession[] 
 
 export function updateSessionStatus(
   id: string,
-  newStatus: TeleconsultStatus,
-  notes?: string
+  newStatus: TeleconsultStatus
 ): TeleconsultSession | null {
-  const session = sessions.get(id);
+  const session = getSession(id);
   if (!session) return null;
 
   const allowed = VALID_TRANSITIONS[session.status] || [];
-  if (!allowed.includes(newStatus) && session.status !== newStatus) {
+  if (!allowed.includes(newStatus)) {
     return null;
   }
 
-  const prevStatus = session.status;
+  if (newStatus === 'ACCEPTED') session.meetingLink = generateMeetingLink();
   session.status = newStatus;
 
   if (newStatus === 'IN_PROGRESS' && !session.startedAt) {
@@ -116,11 +126,8 @@ export function updateSessionStatus(
     session.completedAt = new Date().toISOString();
   }
 
-  if (notes) {
-    session.meetingLink = session.meetingLink;
-  }
-
-  return session;
+  persist(session);
+  return { ...session };
 }
 
 export function getPendingSessionCount(): number {
@@ -132,7 +139,7 @@ export function seedDemoSessions() {
 
   const session1 = createSession({
     patientId: 'patient-2',
-    patientName: 'सुनीता शिंदे',
+    patientName: 'Demo patient A',
     fromFacilityId: 'facility-3',
     doctorId: 'doc-1',
     referralId: 'referral-demo-1',
@@ -140,9 +147,9 @@ export function seedDemoSessions() {
   });
   updateSessionStatus(session1.id, 'ACCEPTED');
 
-  const session2 = createSession({
+  createSession({
     patientId: 'patient-5',
-    patientName: 'सचिन गवसकर',
+    patientName: 'Demo patient B',
     fromFacilityId: 'facility-5',
     doctorId: 'doc-2',
     scheduledTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),

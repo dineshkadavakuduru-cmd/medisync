@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/medisync-logo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#00695C"
+      "backgroundColor": "#FFFFFF"
     },
     "assetBundlePatterns": [
       "**/*"

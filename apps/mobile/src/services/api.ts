@@ -1,5 +1,5 @@
 import { getDemoHeader } from './demoMode';
-import { FacilityType, TriageSeverity, ReferralStatus } from '@medisync/shared';
+import { FacilityType, TriageSeverity, ReferralStatus, DiagnosticPriority, TestFlag, DiagnosticStatus } from '@medisync/shared';
 
 const BASE_URL = 'http://10.0.2.2:3001/api';
 
@@ -7,6 +7,12 @@ const getHeaders = (): Record<string, string> => ({
   'Content-Type': 'application/json',
   ...getDemoHeader(),
 });
+
+interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
 async function safeFetch<T>(url: string, options?: RequestInit, fallbackData?: T): Promise<T> {
   const controller = new AbortController();
@@ -138,4 +144,31 @@ export const api = {
   }).then(r => r.json()),
   getFeedback: (facilityId?: string) => safeFetch(`${BASE_URL}/analytics/feedback${facilityId ? `?facilityId=${facilityId}` : ''}`, { headers: getHeaders() }),
   getFeedbackSummary: () => safeFetch(`${BASE_URL}/analytics/feedback/summary`, { headers: getHeaders() }),
+
+  getDiagnosticsTests: (): Promise<ApiResponse<{ code: string; name: string; unit: string; normalRange: string }[]>> => safeFetch(`${BASE_URL}/diagnostics/tests`, { headers: getHeaders() }),
+  getDiagnosticsOrders: (facilityId?: string, patientId?: string): Promise<ApiResponse<DiagnosticOrder[]>> => safeFetch(`${BASE_URL}/diagnostics/orders${facilityId ? `?facilityId=${facilityId}` : patientId ? `?patientId=${patientId}` : ''}`, { headers: getHeaders() }),
+  createDiagnosticsOrder: (data: {
+    patientId: string;
+    facilityId: string;
+    triageId?: string;
+    referralId?: string;
+    tests: string[];
+    priority?: DiagnosticPriority;
+    orderedBy: string;
+    notes?: string;
+  }): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  }).then(r => r.json()),
+  addDiagnosticsResult: (orderId: string, testCode: string, value: string, unit: string, flag: TestFlag, referenceRange?: string): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders/${orderId}/result`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ testCode, value, unit, flag, referenceRange }),
+  }).then(r => r.json()),
+  updateDiagnosticsOrderStatus: (orderId: string, status: DiagnosticStatus): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders/${orderId}/status`, {
+    method: 'PATCH',
+    headers: getHeaders(),
+    body: JSON.stringify({ status }),
+  }).then(r => r.json()),
 };

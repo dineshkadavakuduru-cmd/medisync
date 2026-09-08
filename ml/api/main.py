@@ -9,7 +9,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from api.beds import router as beds_router
+
 app = FastAPI(title="MediSync ML Triage Service")
+app.include_router(beds_router)
 
 app.add_middleware(
     CORSMiddleware,
