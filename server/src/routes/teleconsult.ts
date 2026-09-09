@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { TeleconsultSession, TeleconsultStatus, Doctor, ApiResponse } from '../types/index.js';
+import { TeleconsultSession, TeleconsultStatus, Doctor, ApiResponse, DoctorAvailability, Prescription, PrescriptionMedication } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
 import {
   createSession,
@@ -12,6 +12,10 @@ import {
   getDoctorById,
   getDoctorsByFacility,
   seedDemoSessions,
+  getDoctorAvailability,
+  getAvailableSlotsForDoctor,
+  createPrescription,
+  getPrescriptionBySession,
 } from '../services/teleconsultService.js';
 
 const teleconsultRoutes: FastifyPluginAsync = async (fastify) => {
@@ -127,6 +131,72 @@ const teleconsultRoutes: FastifyPluginAsync = async (fastify) => {
   }>('/api/teleconsult/doctors/facility/:facilityId', async (request) => {
     const { facilityId } = request.params as { facilityId: string };
     return { success: true, data: getDoctorsByFacility(facilityId) };
+  });
+
+  // Doctor availability endpoints
+  fastify.get<{
+    Params: { doctorId: string };
+    Reply: ApiResponse<DoctorAvailability[]>;
+  }>('/api/teleconsult/doctors/:doctorId/availability', async (request, reply) => {
+    const { doctorId } = request.params as { doctorId: string };
+    if (!getDoctorById(doctorId)) {
+      return reply.status(404).send({ success: false, error: 'Doctor not found' });
+    }
+    return { success: true, data: getDoctorAvailability(doctorId) };
+  });
+
+  fastify.get<{
+    Params: { doctorId: string; date: string };
+    Reply: ApiResponse<{ slots: string[] }>;
+  }>('/api/teleconsult/doctors/:doctorId/slots/:date', async (request, reply) => {
+    const { doctorId, date } = request.params as { doctorId: string; date: string };
+    if (!getDoctorById(doctorId)) {
+      return reply.status(404).send({ success: false, error: 'Doctor not found' });
+    }
+    return { success: true, data: { slots: getAvailableSlotsForDoctor(doctorId, date) } };
+  });
+
+  // Prescription endpoints
+  fastify.post<{
+    Body: {
+      sessionId: string;
+      patientId: string;
+      doctorId: string;
+      medications: PrescriptionMedication[];
+      notes?: string;
+    };
+    Reply: ApiResponse<Prescription>;
+  }>('/api/teleconsult/prescriptions', {
+    schema: { body: {
+      type: 'object', additionalProperties: false, required: ['sessionId', 'patientId', 'doctorId', 'medications'],
+      properties: {
+        sessionId: { type: 'string' },
+        patientId: { type: 'string' },
+        doctorId: { type: 'string' },
+        medications: { type: 'array', minItems: 1, items: { type: 'object', required: ['name', 'dosage', 'frequency', 'duration'], properties: { name: { type: 'string' }, dosage: { type: 'string' }, frequency: { type: 'string' }, duration: { type: 'string' }, instructions: { type: 'string' } } } },
+        notes: { type: 'string', maxLength: 500 },
+      },
+    } },
+  }, async (request, reply) => {
+    const body = request.body as { sessionId: string; patientId: string; doctorId: string; medications: PrescriptionMedication[]; notes?: string };
+    try {
+      const prescription = createPrescription(body);
+      return reply.code(201).send({ success: true, data: prescription });
+    } catch (e) {
+      return reply.status(400).send({ success: false, error: e instanceof Error ? e.message : 'Failed to create prescription' });
+    }
+  });
+
+  fastify.get<{
+    Params: { sessionId: string };
+    Reply: ApiResponse<Prescription>;
+  }>('/api/teleconsult/prescriptions/session/:sessionId', async (request, reply) => {
+    const { sessionId } = request.params as { sessionId: string };
+    const prescription = getPrescriptionBySession(sessionId);
+    if (!prescription) {
+      return reply.status(404).send({ success: false, error: 'Prescription not found' });
+    }
+    return { success: true, data: prescription };
   });
 };
 

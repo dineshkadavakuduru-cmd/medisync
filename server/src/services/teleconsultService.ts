@@ -134,24 +134,132 @@ export function getPendingSessionCount(): number {
   return getAllSessions().filter((s) => s.status === 'REQUESTED' || s.status === 'ACCEPTED').length;
 }
 
-export function seedDemoSessions() {
-  if (sessions.size > 0) return;
+export interface DoctorAvailability {
+  doctorId: string;
+  dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
+  startTime: string; // HH:MM in 24h format
+  endTime: string;
+  isException: boolean;
+  exceptionDate?: string; // YYYY-MM-DD for exception dates
+}
 
-  const session1 = createSession({
-    patientId: 'patient-2',
-    patientName: 'Demo patient A',
-    fromFacilityId: 'facility-3',
-    doctorId: 'doc-1',
-    referralId: 'referral-demo-1',
-    scheduledTime: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-  });
-  updateSessionStatus(session1.id, 'ACCEPTED');
+export interface Prescription {
+  id: string;
+  sessionId: string;
+  patientId: string;
+  doctorId: string;
+  medications: PrescriptionMedication[];
+  notes?: string;
+  createdAt: string;
+}
 
-  createSession({
-    patientId: 'patient-5',
-    patientName: 'Demo patient B',
-    fromFacilityId: 'facility-5',
-    doctorId: 'doc-2',
-    scheduledTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-  });
+export interface PrescriptionMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+}
+
+// Weekly recurring availability for doctors (IST timezone)
+const DOCTOR_AVAILABILITY: DoctorAvailability[] = [
+  // Dr. Sharma (doc-1) - General Physician
+  { doctorId: 'doc-1', dayOfWeek: 1, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 1, startTime: '14:00', endTime: '17:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 2, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 2, startTime: '14:00', endTime: '17:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 3, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 3, startTime: '14:00', endTime: '17:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 4, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 4, startTime: '14:00', endTime: '17:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 5, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-1', dayOfWeek: 5, startTime: '14:00', endTime: '17:00', isException: false },
+  // Dr. Patil (doc-2) - Cardiologist
+  { doctorId: 'doc-2', dayOfWeek: 1, startTime: '10:00', endTime: '14:00', isException: false },
+  { doctorId: 'doc-2', dayOfWeek: 2, startTime: '10:00', endTime: '14:00', isException: false },
+  { doctorId: 'doc-2', dayOfWeek: 3, startTime: '10:00', endTime: '14:00', isException: false },
+  { doctorId: 'doc-2', dayOfWeek: 4, startTime: '10:00', endTime: '14:00', isException: false },
+  { doctorId: 'doc-2', dayOfWeek: 5, startTime: '10:00', endTime: '14:00', isException: false },
+  // Dr. Shinde (doc-3) - Pediatrician
+  { doctorId: 'doc-3', dayOfWeek: 2, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-3', dayOfWeek: 2, startTime: '14:00', endTime: '17:00', isException: false },
+  { doctorId: 'doc-3', dayOfWeek: 4, startTime: '09:00', endTime: '13:00', isException: false },
+  { doctorId: 'doc-3', dayOfWeek: 4, startTime: '14:00', endTime: '17:00', isException: false },
+  // Dr. Kulkarni (doc-4) - Neurologist
+  { doctorId: 'doc-4', dayOfWeek: 1, startTime: '11:00', endTime: '15:00', isException: false },
+  { doctorId: 'doc-4', dayOfWeek: 3, startTime: '11:00', endTime: '15:00', isException: false },
+  { doctorId: 'doc-4', dayOfWeek: 5, startTime: '11:00', endTime: '15:00', isException: false },
+];
+
+export function getDoctorAvailability(doctorId: string): DoctorAvailability[] {
+  return DOCTOR_AVAILABILITY.filter((a) => a.doctorId === doctorId);
+}
+
+export function getAvailableSlotsForDoctor(doctorId: string, date: string): string[] {
+  const dayOfWeek = new Date(date).getDay();
+  const availability = DOCTOR_AVAILABILITY.filter(
+    (a) => a.doctorId === doctorId && a.dayOfWeek === dayOfWeek && !a.isException
+  );
+  
+  // Check for exception dates
+  const exceptions = DOCTOR_AVAILABILITY.filter(
+    (a) => a.doctorId === doctorId && a.isException && a.exceptionDate === date
+  );
+  if (exceptions.length > 0) {
+    // If there's an exception for this date, return no slots
+    return [];
+  }
+
+  const slots: string[] = [];
+  for (const avail of availability) {
+    const start = parseInt(avail.startTime.split(':')[0], 10);
+    const end = parseInt(avail.endTime.split(':')[0], 10);
+    for (let hour = start; hour < end; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        if (hour === end && minute > 0) break;
+        const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+        slots.push(timeStr);
+      }
+    }
+  }
+
+  // Filter out already booked slots
+  const bookedSlots = getAllSessions()
+    .filter((s) => s.doctorId === doctorId && s.scheduledTime.startsWith(date) && 
+      ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(s.status))
+    .map((s) => s.scheduledTime.split('T')[1]?.substring(0, 5))
+    .filter(Boolean);
+
+  return slots.filter((slot) => !bookedSlots.includes(slot));
+}
+
+export function createPrescription(data: {
+  sessionId: string;
+  patientId: string;
+  doctorId: string;
+  medications: PrescriptionMedication[];
+  notes?: string;
+}): Prescription {
+  const session = getSession(data.sessionId);
+  if (!session) throw new Error('Session not found');
+
+  const prescription: Prescription = {
+    id: `rx-${randomBytes(12).toString('hex')}`,
+    sessionId: data.sessionId,
+    patientId: data.patientId,
+    doctorId: data.doctorId,
+    medications: data.medications,
+    notes: data.notes,
+    createdAt: new Date().toISOString(),
+  };
+
+  // Store prescription (in production, persist to database)
+  session.prescription = prescription;
+  persist(session);
+  return prescription;
+}
+
+export function getPrescriptionBySession(sessionId: string): Prescription | undefined {
+  const session = getSession(sessionId);
+  return session?.prescription;
 }

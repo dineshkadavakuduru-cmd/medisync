@@ -11,7 +11,7 @@ export const teleconsultCopy = {
   completeHelp: 'Completing closes the consultation record for both roles, not the remote room. Use Jitsi hang up to leave. Leaving or navigating away never completes the record automatically.',
   waiting: 'Waiting for clinician acceptance. Switch the labelled demo role to accept this request.',
   scheduled: 'Scheduled', status: 'Status', back: 'Back',
-  external: 'Open same meeting in browser',
+  external: 'Open same meeting in browser', copyLink: 'Copy link', copied: 'Link copied!',
   native: 'Expo Go cannot embed the Jitsi native SDK. Open the real meeting in your browser or installed Jitsi app; microphone, camera and hang-up controls live there. Native embedding requires a custom development build, not Expo Go.',
   externalHelp: 'Browser/app joining cannot be detected here. After you actually join, return and confirm below. Opening a link alone does not mark the call in progress.',
   confirmJoined: 'I joined the external meeting',
@@ -24,4 +24,17 @@ export const teleconsultCopy = {
     REQUESTED: 'Requested', ACCEPTED: 'Accepted', IN_PROGRESS: 'In progress',
     COMPLETED: 'Completed', DECLINED: 'Declined', CANCELLED: 'Cancelled',
   },
+
+  // New polish features
+  availability: 'Doctor Availability', weeklySchedule: 'Weekly Schedule', exceptionDates: 'Exception Dates',
+  meetingLink: 'Meeting Link', copyMeetingLink: 'Copy Meeting Link', shareViaWhatsApp: 'Share via WhatsApp',
+  sessionTimer: 'Session Timer', sessionDuration: 'Session Duration', autoEndAt: 'Auto-ends at',
+  extendSession: 'Extend by 5 min', timeRemaining: 'Time Remaining',
+  prescription: 'Prescription', writePrescription: 'Write Prescription', addMedication: 'Add Medication',
+  medicationName: 'Medication Name', dosage: 'Dosage', frequency: 'Frequency', duration: 'Duration',
+  instructions: 'Instructions (optional)', savePrescription: 'Save Prescription',
+  prescriptionSaved: 'Prescription saved to patient timeline',
+  filterByStatus: 'Filter by Status', filterBySpecialty: 'Filter by Specialty',
+  upcomingTabs: 'Upcoming', pastTabs: 'Past', allTabs: 'All',
+  doctorSpecialty: 'Specialty', availableSlots: 'Available Slots', bookSlot: 'Book Slot',
 };

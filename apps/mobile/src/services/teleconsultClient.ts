@@ -2,6 +2,34 @@
 
 export type TeleconsultStatus = 'REQUESTED' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
 export type TeleconsultRole = 'patient' | 'doctor';
+
+export interface DoctorAvailability {
+  doctorId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isException: boolean;
+  exceptionDate?: string;
+}
+
+export interface PrescriptionMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+}
+
+export interface Prescription {
+  id: string;
+  sessionId: string;
+  patientId: string;
+  doctorId: string;
+  medications: PrescriptionMedication[];
+  notes?: string;
+  createdAt: string;
+}
+
 export interface TeleconsultSession {
   id: string;
   patientName: string;
@@ -12,6 +40,7 @@ export interface TeleconsultSession {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  prescription?: Prescription;
 }
 
 const transitions: Record<TeleconsultStatus, TeleconsultStatus[]> = {
@@ -24,7 +53,6 @@ const storageKey = 'teleconsult.demo.v1';
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
 
 export function isMeetingLink(value: string): boolean {
-  // Only opaque rooms on the chosen provider may be opened or embedded.
   return /^https:\/\/meet\.jit\.si\/medisync-[a-f0-9]{48}$/.test(value);
 }
 
@@ -76,7 +104,6 @@ export function createTeleconsultClient(origin = '', storage?: Storage) {
   }
 
   async function local<T>(action: (sessions: TeleconsultSession[]) => Promise<T>, write = false): Promise<T> {
-    // Serialize local reads/writes so double clicks cannot generate two accepted rooms.
     const next = queue.then(async () => {
       const store = storage || (await import('@react-native-async-storage/async-storage')).default;
       const raw = await store.getItem(storageKey);
@@ -136,6 +163,76 @@ export function createTeleconsultClient(origin = '', storage?: Storage) {
         session.status = status;
         return { ...session };
       }, true);
+    },
+    async getDoctorAvailability(doctorId: string): Promise<DoctorAvailability[]> {
+      if (isDemo) {
+        return [
+          { doctorId, dayOfWeek: 1, startTime: '09:00', endTime: '13:00', isException: false },
+          { doctorId, dayOfWeek: 1, startTime: '14:00', endTime: '17:00', isException: false },
+          { doctorId, dayOfWeek: 2, startTime: '09:00', endTime: '13:00', isException: false },
+          { doctorId, dayOfWeek: 2, startTime: '14:00', endTime: '17:00', isException: false },
+          { doctorId, dayOfWeek: 3, startTime: '09:00', endTime: '13:00', isException: false },
+          { doctorId, dayOfWeek: 3, startTime: '14:00', endTime: '17:00', isException: false },
+          { doctorId, dayOfWeek: 4, startTime: '09:00', endTime: '13:00', isException: false },
+          { doctorId, dayOfWeek: 4, startTime: '14:00', endTime: '17:00', isException: false },
+          { doctorId, dayOfWeek: 5, startTime: '09:00', endTime: '13:00', isException: false },
+          { doctorId, dayOfWeek: 5, startTime: '14:00', endTime: '17:00', isException: false },
+        ];
+      }
+      const data = await request(`/doctors/${encodeURIComponent(doctorId)}/availability`);
+      if (!Array.isArray(data)) throw new Error('Invalid availability response');
+      return data as DoctorAvailability[];
+    },
+    async getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
+      if (isDemo) {
+        const dayOfWeek = new Date(date).getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) return [];
+        return ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
+      }
+      const data = await request(`/doctors/${encodeURIComponent(doctorId)}/slots/${encodeURIComponent(date)}`);
+      if (!data || typeof data !== 'object' || !Array.isArray((data as any).slots)) {
+        throw new Error('Invalid slots response');
+      }
+      return (data as { slots: string[] }).slots;
+    },
+    async createPrescription(data: {
+      sessionId: string;
+      patientId: string;
+      doctorId: string;
+      medications: PrescriptionMedication[];
+      notes?: string;
+    }): Promise<Prescription> {
+      if (isDemo) {
+        return {
+          id: `rx-${await opaqueToken()}`,
+          sessionId: data.sessionId,
+          patientId: data.patientId,
+          doctorId: data.doctorId,
+          medications: data.medications,
+          notes: data.notes,
+          createdAt: new Date().toISOString(),
+        };
+      }
+      const result = await request('/prescriptions', 'POST', data);
+      return result as Prescription;
+    },
+    async getPrescription(sessionId: string): Promise<Prescription> {
+      if (isDemo) {
+        return {
+          id: 'demo-rx-1',
+          sessionId,
+          patientId: 'patient-1',
+          doctorId: 'doc-1',
+          medications: [
+            { name: 'Paracetamol 500mg', dosage: '1 tablet', frequency: '3 times daily', duration: '5 days', instructions: 'After meals' },
+            { name: 'Amoxicillin 250mg', dosage: '1 capsule', frequency: '2 times daily', duration: '7 days', instructions: 'Before meals' },
+          ],
+          notes: 'Complete the full course of antibiotics',
+          createdAt: new Date().toISOString(),
+        };
+      }
+      const result = await request(`/prescriptions/session/${encodeURIComponent(sessionId)}`);
+      return result as Prescription;
     },
   };
 }

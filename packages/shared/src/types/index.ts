@@ -277,3 +277,58 @@ export interface DiagnosticOrder {
   notes?: string;
   createdAt: string;
 }
+
+// Teleconsultation types
+export type TeleconsultStatus = 'REQUESTED' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
+
+export interface TeleconsultSession {
+  id: string;
+  patientId?: string;
+  patientName: string;
+  fromFacilityId: string;
+  doctorId: string;
+  doctorName: string;
+  referralId?: string;
+  scheduledTime: string;
+  status: TeleconsultStatus;
+  meetingLink: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  prescription?: Prescription;
+}
+
+export interface Doctor {
+  id: string;
+  name: string;
+  facilityId: string;
+  specialty: string;
+  languages: string[];
+}
+
+export interface DoctorAvailability {
+  doctorId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isException: boolean;
+  exceptionDate?: string;
+}
+
+export interface Prescription {
+  id: string;
+  sessionId: string;
+  patientId: string;
+  doctorId: string;
+  medications: PrescriptionMedication[];
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PrescriptionMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
+}
