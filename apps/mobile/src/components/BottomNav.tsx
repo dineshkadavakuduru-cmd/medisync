@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { BottomTabBarProps, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { COLORS } from '@medisync/shared';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
@@ -8,15 +8,8 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { TriageScreen } from '../screens/TriageScreen';
 import { PatientsScreen } from '../screens/PatientsScreen';
 import { FacilityScreen } from '../screens/FacilityScreen';
-import { EmergencyScreen } from '../screens/EmergencyScreen';
-import { TeleconsultListScreen } from '../screens/TeleconsultListScreen';
-import { AppointmentBookScreen } from '../screens/AppointmentBookScreen';
-import { QueueScreen } from '../screens/QueueScreen';
-import { DiagnosticsScreen } from '../screens/DiagnosticsScreen';
-import { AshaHomeVisitScreen } from '../screens/AshaHomeVisitScreen';
-import { InventoryScreen } from '../screens/InventoryScreen';
+import { MoreScreen } from '../screens/MoreScreen';
 import { useTranslation } from '../i18n';
-import { getActivePersona } from '../services/personas';
 
 const Tab = createBottomTabNavigator();
 
@@ -31,14 +24,9 @@ interface TabIconProps {
 const TAB_ICONS: Record<string, IconName> = {
   Home: 'home-variant-outline',
   Triage: 'stethoscope',
-  Teleconsult: 'video-outline',
-  Appointments: 'calendar-clock-outline',
   Patients: 'account-group-outline',
   Facility: 'hospital-building',
-  Emergency: 'alarm-light-outline',
-  Diagnostics: 'test-tube',
-  AshaHomeVisit: 'home-outline',
-  Inventory: 'package-variant',
+  More: 'dots-horizontal',
 };
 
 const TabIcon: React.FC<TabIconProps> = ({ focused, routeName, label }) => {
@@ -48,60 +36,75 @@ const TabIcon: React.FC<TabIconProps> = ({ focused, routeName, label }) => {
   return (
     <View style={styles.iconContainer}>
       <MaterialCommunityIcons name={iconName} size={22} color={color} />
-      <Text style={[styles.label, { color, fontWeight: focused ? '700' : '500' }]} numberOfLines={1}>
+      <Text style={[styles.label, { color, fontWeight: focused ? '700' : '500' }]}>
         {label}
       </Text>
     </View>
   );
 };
 
-export const BottomNav: React.FC = () => {
+const FixedTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
   const { t } = useTranslation();
-  const persona = getActivePersona();
-  const isAsha = persona.role === 'ASHA';
-  const isPharmacist = persona.role === 'PHARMACIST';
 
   return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
-        tabBarStyle: styles.tabBar,
-        tabBarShowLabel: false,
-        headerShown: false,
-        tabBarIcon: ({ focused }) => {
+    <View style={styles.tabBar}>
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const options = descriptors[route.key].options;
           return (
-            <TabIcon
-              focused={focused}
-              routeName={route.name}
-              label={t(`common.${route.name.toLowerCase()}` as any) || route.name}
-            />
+            <TouchableOpacity
+              key={route.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: focused }}
+              accessibilityLabel={options.tabBarAccessibilityLabel || t(`common.${route.name.toLowerCase()}`)}
+              testID={options.tabBarTestID || `tab-${route.name.toLowerCase()}`}
+              style={styles.tabItem}
+              onPress={() => {
+                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+                if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
+              }}
+              onLongPress={() => navigation.emit({ type: 'tabLongPress', target: route.key })}
+            >
+              <TabIcon focused={focused} routeName={route.name} label={t(`common.${route.name.toLowerCase()}`)} />
+            </TouchableOpacity>
           );
-        },
-      })}
+        })}
+    </View>
+  );
+};
+
+export const BottomNav: React.FC = () => {
+  return (
+    <Tab.Navigator
+      tabBar={(props) => <FixedTabBar {...props} />}
+      screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Home" component={HomeScreen} />
       <Tab.Screen name="Triage" component={TriageScreen} />
-      <Tab.Screen name="Teleconsult" component={TeleconsultListScreen} />
-      <Tab.Screen name="Appointments" component={QueueScreen} />
       <Tab.Screen name="Patients" component={PatientsScreen} />
       <Tab.Screen name="Facility" component={FacilityScreen} />
-      <Tab.Screen name="Emergency" component={EmergencyScreen} />
-      <Tab.Screen name="Diagnostics" component={DiagnosticsScreen} />
-      {isAsha && <Tab.Screen name="AshaHomeVisit" component={AshaHomeVisitScreen} />}
-      {isPharmacist && <Tab.Screen name="Inventory" component={InventoryScreen} />}
+      <Tab.Screen name="More" component={MoreScreen} />
     </Tab.Navigator>
   );
 };
 
 const styles = StyleSheet.create({
+  tabItem: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 54,
+    paddingHorizontal: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   tabBar: {
+    flexDirection: 'row',
     backgroundColor: COLORS.surface,
     borderTopWidth: 1,
     borderTopColor: COLORS.border,
     paddingBottom: 4,
     paddingTop: 4,
-    height: 62,
+    minHeight: 62,
     ...theme.shadows.lg,
   },
   iconContainer: {
@@ -112,5 +115,6 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 10,
     marginTop: 1,
+    textAlign: 'center',
   },
 });

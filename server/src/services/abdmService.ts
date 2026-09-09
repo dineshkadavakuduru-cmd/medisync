@@ -1,3 +1,14 @@
+import { z } from 'zod';
+import { idSchema, text } from '../validation.js';
+
+export const abhaSchema = z.string().regex(/^(?:[0-9]{14}|[0-9]{2}-[0-9]{4}-[0-9]{4}-[0-9]{4})$/);
+export const consentStatusSchema = z.enum(['REQUESTED', 'GRANTED', 'DENIED', 'EXPIRED', 'REVOKED']);
+export const consentSchema = z.object({
+  patientAbhaId: abhaSchema, patientName: text(160), requesterId: idSchema, requesterName: text(160),
+  purpose: text(500), dataRequested: z.array(text(100)).min(1).max(20).refine(values => new Set(values).size === values.length, 'Duplicate data types'),
+  validFrom: z.string().datetime(), validTo: z.string().datetime(),
+}).strict().refine(value => Date.parse(value.validTo) > Date.parse(value.validFrom), 'validTo must be after validFrom');
+
 const ABDM_SYSTEMS = {
   healthId: 'https://healthid.ndhm.gov.in',
   abhaAddress: 'https://abha.abdm.gov.in',
@@ -5,6 +16,8 @@ const ABDM_SYSTEMS = {
 };
 
 export interface ConsentRequest {
+  mode: 'demo';
+  legallyValid: false;
   id: string;
   patientAbhaId: string;
   patientName: string;
@@ -21,18 +34,11 @@ export interface ConsentRequest {
 export interface VerificationResult {
   valid: boolean;
   abhaId: string;
-  name: string;
-  gender: string;
-  age: number;
-  address: string;
-  mobile: string;
+  mode: 'unconfigured';
+  verified: false;
+  formatValid: boolean;
   message: string;
 }
-
-const VALID_ABHA_PATTERNS = [
-  /^\d{2}-\d{4}-\d{4}-\d{4}$/,
-  /^\d{14}$/,
-];
 
 const consents: Map<string, ConsentRequest> = new Map();
 
@@ -41,36 +47,9 @@ function generateId(): string {
 }
 
 export function verifyHealthId(abhaId: string): Promise<VerificationResult> {
-  return new Promise((resolve) => {
-    const isValidFormat = VALID_ABHA_PATTERNS.some((p) => p.test(abhaId));
-
-    setTimeout(() => {
-      if (!isValidFormat) {
-        resolve({
-          valid: false,
-          abhaId,
-          name: '',
-          gender: '',
-          age: 0,
-          address: '',
-          mobile: '',
-          message: 'Invalid ABHA ID format',
-        });
-        return;
-      }
-
-      resolve({
-        valid: true,
-        abhaId,
-        name: 'Patient Name (from ABDM)',
-        gender: 'M',
-        age: 35,
-        address: 'Village, District, Maharashtra',
-        mobile: 'XXXXXXXXXX',
-        message: 'ABHA ID verified successfully',
-      });
-    }, 300);
-  });
+  const formatValid = abhaSchema.safeParse(abhaId).success;
+  return Promise.resolve({ valid: false, abhaId, formatValid, verified: false, mode: 'unconfigured',
+    message: formatValid ? 'ABDM provider unconfigured; format check is not identity verification' : 'Invalid ABHA ID format; identity not verified' });
 }
 
 export function generateConsentArtifact(data: {
@@ -83,7 +62,10 @@ export function generateConsentArtifact(data: {
   validFrom: string;
   validTo: string;
 }): ConsentRequest {
+  data = consentSchema.parse(data);
   const consent: ConsentRequest = {
+    mode: 'demo',
+    legallyValid: false,
     id: generateId(),
     patientAbhaId: data.patientAbhaId,
     patientName: data.patientName,
@@ -109,6 +91,7 @@ export function updateConsentStatus(
   id: string,
   status: ConsentRequest['status']
 ): ConsentRequest | null {
+  consentStatusSchema.parse(status);
   const consent = consents.get(id);
   if (!consent) return null;
   consent.status = status;
@@ -119,28 +102,15 @@ export function getConsentsByPatient(patientAbhaId: string): ConsentRequest[] {
   return Array.from(consents.values()).filter((c) => c.patientAbhaId === patientAbhaId);
 }
 
-export function generateAbdmPatientOtp(abhaId: string): Promise<{ success: boolean; txnId: string; message: string }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        success: true,
-        txnId: `txn-${Date.now()}`,
-        message: 'OTP sent to mobile number linked with ABHA ID',
-      });
-    }, 200);
-  });
+export async function generateAbdmPatientOtp(abhaId: string) {
+  abhaSchema.parse(abhaId);
+  return { success: false, mode: 'unconfigured' as const, delivered: false, message: 'ABDM provider unconfigured; no OTP sent' };
 }
 
-export function verifyAbdmOtp(txnId: string, otp: string): Promise<{ success: boolean; message: string }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const success = otp.length === 6;
-      resolve({
-        success,
-        message: success ? 'OTP verified successfully' : 'Invalid OTP',
-      });
-    }, 200);
-  });
+export async function verifyAbdmOtp(txnId: string, otp: string) {
+  idSchema.parse(txnId);
+  z.string().regex(/^[0-9]{6}$/).parse(otp);
+  return { success: false, mode: 'unconfigured' as const, verified: false, message: 'ABDM provider unconfigured; identity not verified' };
 }
 
 export function getAbdmSystems(): typeof ABDM_SYSTEMS {

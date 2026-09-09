@@ -1,37 +1,124 @@
-import { getDemoHeader } from './demoMode';
+import { getDemoHeader, isDemoActive } from './demoMode';
 import { FacilityType, TriageSeverity, ReferralStatus, DiagnosticPriority, TestFlag, DiagnosticStatus } from '@medisync/shared';
+import type { Patient, HealthRecord, Facility, FacilitySummary, MedicineItem, StaffMember, FacilitiesAnalytics, Referral, Alert, TriageResult, DiagnosticOrder, Emergency, EmergencyEvent, EmergencyStatus, EmergencyStats, Ambulance } from '@medisync/shared';
 
-const BASE_URL = 'http://10.0.2.2:3001/api';
+export function getApiOrigin(): string {
+  const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (!configured) throw new Error('EXPO_PUBLIC_API_URL is not configured. A server connection is required.');
+  const url = new URL(configured);
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || !['/', '/api', '/api/'].includes(url.pathname)) {
+    throw new Error('EXPO_PUBLIC_API_URL must be an HTTP(S) origin (optionally ending in /api).');
+  }
+  return url.origin;
+}
 
 const getHeaders = (): Record<string, string> => ({
   'Content-Type': 'application/json',
   ...getDemoHeader(),
 });
 
-interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
+export type ApiResponse<T> = (
+  | { success: true; data: T; error?: never }
+  | { success: false; data?: never; error: string }
+) & { source?: 'sample'; limitation?: string };
+
+export interface VitalSigns {
+  temperature?: number;
+  heartRate?: number;
+  bloodPressureSystolic?: number;
+  bloodPressureDiastolic?: number;
+  oxygenSaturation?: number;
+  respiratoryRate?: number;
 }
 
-async function safeFetch<T>(url: string, options?: RequestInit, fallbackData?: T): Promise<T> {
+export interface TriagePayload {
+  patientId: string;
+  symptoms: string[];
+  patientAge: number;
+  patientGender: Patient['gender'];
+  vitalSigns?: VitalSigns;
+}
+
+export interface ClinicalTriageResult extends TriageResult {
+  id: string;
+  affectedSystems: string[];
+  vitalSignFlags: string[];
+  aiSummary: string;
+  recommendedDiagnostics: string[];
+}
+
+export interface SymptomCategory {
+  name: string;
+  icon: string;
+  symptoms: { id: string; label: string; labelHi: string; labelMr: string; system: string; weight: number; redFlag: boolean }[];
+}
+
+export interface ReferralPayload extends TriagePayload {
+  fromFacilityId: string;
+  reason?: string;
+}
+
+export interface DiagnosticOrderPayload {
+  patientId: string;
+  facilityId: string;
+  triageId?: string;
+  referralId?: string;
+  tests: string[];
+  priority?: DiagnosticPriority;
+  orderedBy: string;
+  notes?: string;
+}
+
+// The existing demo caller supplies a level; the server still determines the actual protocol.
+export type EmergencyPayload = Pick<Emergency, 'patientId' | 'patientName' | 'patientAge' | 'patientGender' | 'condition' | 'description' | 'originFacilityId' | 'initiatedBy'> & Partial<Pick<Emergency, 'protocolLevel'>>;
+
+export interface PatientFeedback {
+  id: string;
+  patientId?: string;
+  facilityId: string;
+  visitDate: string;
+  rating: 1 | 2 | 3 | 4 | 5;
+  tags: string[];
+  comment?: string;
+  language: 'en' | 'hi' | 'mr';
+}
+
+export interface FeedbackSummary {
+  avgRating: number;
+  totalFeedback: number;
+  ratingDistribution: Record<1 | 2 | 3 | 4 | 5, number>;
+  topPositiveTags: { tag: string; count: number }[];
+  topNegativeTags: { tag: string; count: number }[];
+  byFacility: { facilityId: string; facilityName: string; avgRating: number; feedbackCount: number }[];
+}
+
+async function safeFetch<T>(path: string, options?: RequestInit, fallbackData?: T): Promise<T> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 2500);
   try {
-    const res = await fetch(url, {
+    if (isDemoActive()) throw new Error('Demo mode: server operations are paused. Switch to server mode to connect.');
+    const res = await fetch(`${getApiOrigin()}/api${path}`, {
       ...options,
       headers: { ...getHeaders(), ...(options?.headers || {}) },
       signal: controller.signal,
     });
-    clearTimeout(timeoutId);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const body: unknown = await res.json();
+    if (typeof body === 'object' && body !== null && 'success' in body && body.success === false) {
+      throw new Error('error' in body && typeof body.error === 'string' ? body.error : 'API request failed');
+    }
+    if (typeof body !== 'object' || body === null || !('success' in body) || body.success !== true || !('data' in body) || body.data == null) {
+      throw new Error('The server did not return a confirmed API response.');
+    }
+    // Endpoint-specific contracts below describe the server's JSON envelopes.
+    return body as T;
   } catch (err) {
-    clearTimeout(timeoutId);
-    if (fallbackData !== undefined) {
+    if ((!options?.method || options.method === 'GET') && fallbackData !== undefined) {
       return fallbackData;
     }
     throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -75,100 +162,52 @@ const MOCK_ALERTS = {
 
 export { MOCK_FACILITIES, MOCK_DASHBOARD, MOCK_ACTIVE_REFERRALS, MOCK_ALERTS };
 export const api = {
-  getDashboardStats: () => safeFetch(`${BASE_URL}/analytics/dashboard`, {}, MOCK_DASHBOARD),
-  getPatients: () => safeFetch(`${BASE_URL}/patients`, { headers: getHeaders() }),
-  getPatient: (id: string) => safeFetch(`${BASE_URL}/patients/${id}`, { headers: getHeaders() }),
-  getPatientRecords: (id: string) => safeFetch(`${BASE_URL}/patients/${id}/records`, { headers: getHeaders() }),
-  getFacilities: () => safeFetch(`${BASE_URL}/facilities`, { headers: getHeaders() }, { data: MOCK_FACILITIES }),
-  getFacility: (id: string) => safeFetch(`${BASE_URL}/facilities/${id}`, { headers: getHeaders() }),
-  getFacilitySummary: (id: string) => safeFetch(`${BASE_URL}/facilities/${id}/summary`, { headers: getHeaders() }),
-  getFacilityInventory: (id: string) => safeFetch(`${BASE_URL}/facilities/${id}/inventory`, { headers: getHeaders() }),
-  getFacilityStaff: (id: string) => safeFetch(`${BASE_URL}/facilities/${id}/staff`, { headers: getHeaders() }),
-  getAnalyticsFacilities: () => safeFetch(`${BASE_URL}/analytics/facilities`, { headers: getHeaders() }, {
-    success: true,
-    data: {
-      facilities: MOCK_FACILITIES,
-      districtSummary: { totalBeds: 421, availableBeds: 180, avgMedicineAvailability: 79, totalStaffOnDuty: 48, facilitiesWithCriticalStock: 2 }
+  // Only dashboard overview calls retain explicitly marked sample fallbacks.
+  getDashboardStats: async () => {
+    type DashboardData = Omit<typeof MOCK_DASHBOARD, 'todaysReferrals' | 'topConditions'> & { todayReferrals: number; topConditions: { name: string; count: number }[] };
+    try {
+      const response = await safeFetch<ApiResponse<DashboardData>>('/analytics/dashboard');
+      if (!response.success) throw new Error(response.error);
+      return { ...response.data, todaysReferrals: response.data.todayReferrals, topConditions: response.data.topConditions.map(condition => condition.name), source: 'server' as const };
+    } catch {
+      return { ...MOCK_DASHBOARD, source: 'sample' as const, limitation: 'Sample dashboard data; not live clinical data.' };
     }
-  }),
-  updateBeds: (id: string, available: number) => fetch(`${BASE_URL}/facilities/${id}/beds`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify({ available }),
-  }).then(r => r.json()),
-  updateMedicineStock: (id: string, medicineId: string, currentStock: number) =>
-    fetch(`${BASE_URL}/facilities/${id}/inventory/${medicineId}`, {
-      method: 'PATCH',
-      headers: getHeaders(),
-      body: JSON.stringify({ currentStock }),
-    }).then(r => r.json()),
-  getSymptoms: () => safeFetch(`${BASE_URL}/triage/symptoms`, { headers: getHeaders() }),
-  submitTriage: (data: any) => fetch(`${BASE_URL}/triage`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  }).then(r => r.json()),
-  createReferral: (data: any) => fetch(`${BASE_URL}/referrals`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  }).then(r => r.json()),
-  getReferrals: () => safeFetch(`${BASE_URL}/referrals`, { headers: getHeaders() }),
-  getActiveReferrals: () => safeFetch(`${BASE_URL}/referrals/active`, { headers: getHeaders() }, { data: MOCK_ACTIVE_REFERRALS }),
-  getAlerts: () => safeFetch(`${BASE_URL}/alerts`, { headers: getHeaders() }, MOCK_ALERTS),
-  createEmergency: (data: any) => fetch(`${BASE_URL}/emergencies`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  }).then(r => r.json()),
-  getEmergencies: (status?: string) => safeFetch(`${BASE_URL}/emergencies${status ? `?status=${status}` : ''}`, { headers: getHeaders() }),
-  getEmergency: (id: string) => safeFetch(`${BASE_URL}/emergencies/${id}`, { headers: getHeaders() }),
-  acknowledgeEmergency: (id: string, userId: string) => fetch(`${BASE_URL}/emergencies/${id}/acknowledge`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify({ userId }),
-  }).then(r => r.json()),
-  updateEmergencyStatus: (id: string, status: string, userId: string, notes?: string) => fetch(`${BASE_URL}/emergencies/${id}/status`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify({ status, userId, notes }),
-  }).then(r => r.json()),
-  dispatchAmbulance: (id: string) => fetch(`${BASE_URL}/emergencies/${id}/dispatch`, { method: 'POST', headers: getHeaders() }).then(r => r.json()),
-  getEmergencyTimeline: (id: string) => safeFetch(`${BASE_URL}/emergencies/${id}/timeline`, { headers: getHeaders() }),
-  getEmergencyStats: () => safeFetch(`${BASE_URL}/emergencies/stats`, { headers: getHeaders() }),
-  getAmbulances: () => safeFetch(`${BASE_URL}/ambulances`, { headers: getHeaders() }),
-  submitFeedback: (data: any) => fetch(`${BASE_URL}/analytics/feedback`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  }).then(r => r.json()),
-  getFeedback: (facilityId?: string) => safeFetch(`${BASE_URL}/analytics/feedback${facilityId ? `?facilityId=${facilityId}` : ''}`, { headers: getHeaders() }),
-  getFeedbackSummary: () => safeFetch(`${BASE_URL}/analytics/feedback/summary`, { headers: getHeaders() }),
-
-  getDiagnosticsTests: (): Promise<ApiResponse<{ code: string; name: string; unit: string; normalRange: string }[]>> => safeFetch(`${BASE_URL}/diagnostics/tests`, { headers: getHeaders() }),
-  getDiagnosticsOrders: (facilityId?: string, patientId?: string): Promise<ApiResponse<DiagnosticOrder[]>> => safeFetch(`${BASE_URL}/diagnostics/orders${facilityId ? `?facilityId=${facilityId}` : patientId ? `?patientId=${patientId}` : ''}`, { headers: getHeaders() }),
-  createDiagnosticsOrder: (data: {
-    patientId: string;
-    facilityId: string;
-    triageId?: string;
-    referralId?: string;
-    tests: string[];
-    priority?: DiagnosticPriority;
-    orderedBy: string;
-    notes?: string;
-  }): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders`, {
-    method: 'POST',
-    headers: getHeaders(),
-    body: JSON.stringify(data),
-  }).then(r => r.json()),
-  addDiagnosticsResult: (orderId: string, testCode: string, value: string, unit: string, flag: TestFlag, referenceRange?: string): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders/${orderId}/result`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify({ testCode, value, unit, flag, referenceRange }),
-  }).then(r => r.json()),
-  updateDiagnosticsOrderStatus: (orderId: string, status: DiagnosticStatus): Promise<ApiResponse<DiagnosticOrder>> => fetch(`${BASE_URL}/diagnostics/orders/${orderId}/status`, {
-    method: 'PATCH',
-    headers: getHeaders(),
-    body: JSON.stringify({ status }),
-  }).then(r => r.json()),
+  },
+  getPatients: () => safeFetch<ApiResponse<Patient[]>>('/patients'),
+  getPatient: (id: string) => safeFetch<ApiResponse<Patient>>(`/patients/${encodeURIComponent(id)}`),
+  getPatientRecords: (id: string) => safeFetch<ApiResponse<HealthRecord[]>>(`/patients/${encodeURIComponent(id)}/records`),
+  getFacilities: () => safeFetch<ApiResponse<Facility[]>>('/facilities'),
+  getFacility: (id: string) => safeFetch<ApiResponse<Facility>>(`/facilities/${encodeURIComponent(id)}`),
+  getFacilitySummary: (id: string) => safeFetch<ApiResponse<FacilitySummary>>(`/facilities/${encodeURIComponent(id)}/summary`),
+  getFacilityInventory: (id: string) => safeFetch<ApiResponse<MedicineItem[]>>(`/facilities/${encodeURIComponent(id)}/inventory`),
+  getFacilityStaff: (id: string) => safeFetch<ApiResponse<StaffMember[]>>(`/facilities/${encodeURIComponent(id)}/staff`),
+  getAnalyticsFacilities: () => safeFetch<ApiResponse<FacilitiesAnalytics>>('/analytics/facilities'),
+  updateBeds: (id: string, available: number) => safeFetch<ApiResponse<Facility>>(`/facilities/${encodeURIComponent(id)}/beds`, { method: 'PATCH', body: JSON.stringify({ available }) }),
+  updateMedicineStock: (id: string, medicineId: string, currentStock: number) => safeFetch<ApiResponse<MedicineItem>>(`/facilities/${encodeURIComponent(id)}/inventory/${encodeURIComponent(medicineId)}`, { method: 'PATCH', body: JSON.stringify({ currentStock }) }),
+  getSymptoms: () => safeFetch<ApiResponse<{ categories: SymptomCategory[] }>>('/triage/symptoms'),
+  submitTriage: (data: TriagePayload) => safeFetch<ApiResponse<ClinicalTriageResult>>('/triage', { method: 'POST', body: JSON.stringify(data) }),
+  createReferral: (data: ReferralPayload) => safeFetch<ApiResponse<Referral & { toFacility: Facility; distanceKm: number; routingReason: string }>>('/referrals', { method: 'POST', body: JSON.stringify(data) }),
+  getReferrals: () => safeFetch<ApiResponse<Referral[]>>('/referrals'),
+  getActiveReferrals: () => safeFetch<ApiResponse<Referral[]>>('/referrals/active', {}, { success: true, data: MOCK_ACTIVE_REFERRALS, source: 'sample', limitation: 'Sample referrals; not live clinical data.' }),
+  getAlerts: () => safeFetch<ApiResponse<Alert[] | typeof MOCK_ALERTS.data>>('/alerts', {}, { success: true, data: MOCK_ALERTS.data, source: 'sample', limitation: 'Sample alerts; not live clinical data.' }),
+  createEmergency: (data: EmergencyPayload) => safeFetch<ApiResponse<Emergency>>('/emergencies', { method: 'POST', body: JSON.stringify(data) }),
+  getEmergencies: (status?: string) => safeFetch<ApiResponse<Emergency[]>>(`/emergencies${status ? `?status=${encodeURIComponent(status)}` : ''}`),
+  getEmergency: (id: string) => safeFetch<ApiResponse<Emergency>>(`/emergencies/${encodeURIComponent(id)}`),
+  acknowledgeEmergency: (id: string, userId: string) => safeFetch<ApiResponse<Emergency>>(`/emergencies/${encodeURIComponent(id)}/acknowledge`, { method: 'PATCH', body: JSON.stringify({ userId }) }),
+  updateEmergencyStatus: (id: string, status: EmergencyStatus, userId: string, notes?: string) => safeFetch<ApiResponse<Emergency>>(`/emergencies/${encodeURIComponent(id)}/status`, { method: 'PATCH', body: JSON.stringify({ status, userId, notes }) }),
+  dispatchAmbulance: (id: string) => safeFetch<ApiResponse<{ ambulance: Ambulance; emergency: Emergency }>>(`/emergencies/${encodeURIComponent(id)}/dispatch`, { method: 'POST' }),
+  getEmergencyTimeline: (id: string) => safeFetch<ApiResponse<{ timeline: EmergencyEvent[] }>>(`/emergencies/${encodeURIComponent(id)}/timeline`),
+  getEmergencyStats: () => safeFetch<ApiResponse<EmergencyStats>>('/emergencies/stats'),
+  getAmbulances: () => safeFetch<ApiResponse<Ambulance[]>>('/ambulances'),
+  submitFeedback: (data: Omit<PatientFeedback, 'id'>) => safeFetch<ApiResponse<PatientFeedback>>('/analytics/feedback', { method: 'POST', body: JSON.stringify(data) }),
+  getFeedback: (facilityId?: string) => safeFetch<ApiResponse<PatientFeedback[]>>(`/analytics/feedback${facilityId ? `?facilityId=${encodeURIComponent(facilityId)}` : ''}`),
+  getFeedbackSummary: () => safeFetch<ApiResponse<FeedbackSummary>>('/analytics/feedback/summary'),
+  getDiagnosticsTests: () => safeFetch<ApiResponse<{ code: string; name: string; unit: string; normalRange: string }[]>>('/diagnostics/tests'),
+  getDiagnosticsOrders: (facilityId?: string, patientId?: string) => {
+    const filters = [facilityId ? `facilityId=${encodeURIComponent(facilityId)}` : '', patientId ? `patientId=${encodeURIComponent(patientId)}` : ''].filter(Boolean).join('&');
+    return safeFetch<ApiResponse<DiagnosticOrder[]>>(`/diagnostics/orders${filters ? `?${filters}` : ''}`);
+  },
+  createDiagnosticsOrder: (data: DiagnosticOrderPayload) => safeFetch<ApiResponse<DiagnosticOrder>>('/diagnostics/orders', { method: 'POST', body: JSON.stringify(data) }),
+  addDiagnosticsResult: (orderId: string, testCode: string, value: string, unit: string, flag: TestFlag, referenceRange?: string) => safeFetch<ApiResponse<DiagnosticOrder>>(`/diagnostics/orders/${encodeURIComponent(orderId)}/result`, { method: 'PATCH', body: JSON.stringify({ testCode, value, unit, flag, referenceRange }) }),
+  updateDiagnosticsOrderStatus: (orderId: string, status: DiagnosticStatus) => safeFetch<ApiResponse<DiagnosticOrder>>(`/diagnostics/orders/${encodeURIComponent(orderId)}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 };

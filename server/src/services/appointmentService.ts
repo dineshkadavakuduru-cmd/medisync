@@ -28,11 +28,6 @@ function generateId(): string {
   return `apt-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
 
-function getFacilityName(facilityId: string): string {
-  const facility = mockFacilities.find((f) => f.id === facilityId);
-  return facility?.name || facilityId;
-}
-
 function getTriageSeverityRank(severity: TriageSeverity): number {
   const rank: Record<TriageSeverity, number> = { RED: 0, YELLOW: 1, GREEN: 2 };
   return rank[severity];

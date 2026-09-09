@@ -1,8 +1,11 @@
-import { DiagnosticOrder, DiagnosticStatus, TestResult, TestFlag, DiagnosticPriority, TriageSeverity } from '../types/index.js';
+import { DiagnosticOrder, DiagnosticStatus, TestResult, TestFlag, DiagnosticPriority } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
-import { getRecommendedDiagnostics } from './triageService.js';
+import { z } from 'zod';
+import { fileURLToPath, URL } from 'node:url';
+import { FileStore } from '../database/fileStore.js';
+import { ApiError, idSchema, text } from '../validation.js';
 
-const orders: Map<string, DiagnosticOrder> = new Map();
+export const diagnosticStore = new FileStore<DiagnosticOrder>(process.env.DIAGNOSTICS_STORE_PATH || fileURLToPath(new URL('../../data/diagnostics.json', import.meta.url)));
 
 const PATIENT_NAMES: Record<string, string> = {
   'patient-1': 'राजेश पाटिल',
@@ -44,7 +47,29 @@ export const TESTS_CATALOG: { code: string; name: string; unit: string; normalRa
   { code: 'ear_swab', name: 'Ear Swab Culture', unit: '', normalRange: 'No growth', referenceLow: 0, referenceHigh: 0 },
   { code: 'tryptase', name: 'Tryptase', unit: 'ng/mL', normalRange: '<11.4', referenceLow: 0, referenceHigh: 11.4 },
   { code: 'cbc_lft_kft', name: 'Comprehensive Panel (CBC+LFT+KFT)', unit: '', normalRange: 'Within normal limits', referenceLow: 0, referenceHigh: 0 },
+  { code: 'cardiac_marker_panel', name: 'Cardiac Marker Panel', unit: '', normalRange: 'See laboratory reference ranges', referenceLow: 0, referenceHigh: 0 },
+  { code: 'temperature', name: 'Body Temperature', unit: 'C', normalRange: 'See clinical reference range', referenceLow: 0, referenceHigh: 0 },
 ];
+
+export const diagnosticStatusSchema = z.enum(['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED']);
+const testCodeSchema = text(50).refine(code => TESTS_CATALOG.some(test => test.code === code), 'Unknown catalogue test code');
+export const orderSchema = z.object({
+  patientId: idSchema,
+  facilityId: idSchema.refine(id => mockFacilities.some(f => f.id === id), 'Unknown facility'),
+  triageId: idSchema.optional(), referralId: idSchema.optional(),
+  tests: z.array(testCodeSchema).min(1).max(TESTS_CATALOG.length).refine(codes => new Set(codes).size === codes.length, 'Duplicate test codes'),
+  priority: z.enum(['ROUTINE', 'URGENT', 'STAT']).default('ROUTINE'),
+  orderedBy: text(100), notes: text(2000).optional(),
+}).strict();
+export const resultSchema = z.object({
+  testCode: testCodeSchema, value: text(2000).refine(value => !/^(not yet added|pending|n\/?a)$/i.test(value), 'An actual result is required'),
+  unit: z.string().trim().max(50), flag: z.enum(['NORMAL', 'ABNORMAL', 'CRITICAL']), referenceRange: text(200).optional(),
+}).strict();
+const transitions: Record<DiagnosticStatus, DiagnosticStatus[]> = {
+  ORDERED: ['SAMPLE_COLLECTED', 'CANCELLED'],
+  SAMPLE_COLLECTED: ['IN_PROGRESS', 'CANCELLED'],
+  IN_PROGRESS: ['COMPLETED', 'CANCELLED'], COMPLETED: [], CANCELLED: [],
+};
 
 function generateId(): string {
   return `dx-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -72,7 +97,8 @@ export function createOrder(data: {
   priority?: DiagnosticPriority;
   orderedBy: string;
   notes?: string;
-}): DiagnosticOrder {
+}, persist = true): DiagnosticOrder {
+  data = orderSchema.parse(data);
   const order: DiagnosticOrder = {
     id: generateId(),
     patientId: data.patientId,
@@ -90,16 +116,16 @@ export function createOrder(data: {
     createdAt: new Date().toISOString(),
   };
 
-  orders.set(order.id, order);
+  if (persist) diagnosticStore.save(order);
   return order;
 }
 
 export function getOrder(id: string): DiagnosticOrder | undefined {
-  return orders.get(id);
+  return diagnosticStore.get(id);
 }
 
 export function getAllOrders(): DiagnosticOrder[] {
-  return Array.from(orders.values()).sort(
+  return diagnosticStore.all().sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
@@ -122,76 +148,60 @@ export function addTestResult(
   value: string,
   unit: string,
   flag: TestFlag,
-  referenceRange?: string
+  referenceRange?: string,
+  persist = true
 ): DiagnosticOrder | null {
-  const order = orders.get(orderId);
+  const input = resultSchema.parse({ testCode, value, unit, flag, referenceRange });
+  const order = getOrder(orderId);
   if (!order) return null;
+  if (!['SAMPLE_COLLECTED', 'IN_PROGRESS'].includes(order.status)) throw new ApiError(409, 'Results require SAMPLE_COLLECTED or IN_PROGRESS');
+  if (!order.tests.includes(input.testCode)) throw new ApiError(400, 'Test was not ordered');
+  if (order.results.some(result => result.testCode === input.testCode)) throw new ApiError(409, 'A result for this test already exists');
 
-  const catalogEntry = TESTS_CATALOG.find((t) => t.code === testCode);
+  const catalogEntry = TESTS_CATALOG.find((t) => t.code === input.testCode)!;
   const result: TestResult = {
     id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-    testName: catalogEntry?.name || testCode,
-    testCode,
-    value,
-    unit,
-    flag,
-    referenceRange: referenceRange || catalogEntry?.normalRange,
+    testName: catalogEntry.name,
+    testCode: input.testCode,
+    value: input.value,
+    unit: input.unit,
+    flag: input.flag,
+    referenceRange: input.referenceRange || catalogEntry?.normalRange,
   };
 
   order.results.push(result);
-  if (order.results.length >= order.tests.length) {
+  if (order.tests.every(code => order.results.some(result => result.testCode === code))) {
     order.status = 'COMPLETED';
+    order.completedAt = new Date().toISOString();
   } else {
     order.status = 'IN_PROGRESS';
   }
 
+  if (persist) diagnosticStore.save(order);
   return order;
 }
 
-export function updateOrderStatus(id: string, status: DiagnosticStatus): DiagnosticOrder | null {
-  const order = orders.get(id);
+export function updateOrderStatus(id: string, status: DiagnosticStatus, persist = true): DiagnosticOrder | null {
+  diagnosticStatusSchema.parse(status);
+  const order = getOrder(id);
   if (!order) return null;
-  order.status = status;
-  if (status === 'COMPLETED') {
-    order.results = order.results.length === 0
-      ? order.tests.map((t) => {
-          const catalogEntry = TESTS_CATALOG.find((c) => c.code === t);
-          return {
-            id: `tr-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            testName: catalogEntry?.name || t,
-            testCode: t,
-            value: 'Not yet added',
-            unit: catalogEntry?.unit || '',
-            flag: 'NORMAL' as TestFlag,
-            referenceRange: catalogEntry?.normalRange,
-          };
-        })
-      : order.results;
+  if (order.status === status) return order;
+  if (!transitions[order.status].includes(status)) throw new ApiError(409, `Cannot transition from ${order.status} to ${status}`);
+  if (status === 'COMPLETED' && (order.results.length !== order.tests.length ||
+      new Set(order.results.map(result => result.testCode)).size !== order.tests.length ||
+      !order.tests.every(code => order.results.some(result => result.testCode === code && resultSchema.safeParse({ testCode: result.testCode, value: result.value, unit: result.unit, flag: result.flag, referenceRange: result.referenceRange }).success)))) {
+    throw new ApiError(409, 'Completion requires one actual result for every ordered test');
   }
+  order.status = status;
+  if (status === 'COMPLETED') order.completedAt = new Date().toISOString();
+  if (persist) diagnosticStore.save(order);
   return order;
-}
-
-export function autoOrderDiagnostics(triageId: string, patientId: string, facilityId: string, symptoms: string[], orderedBy: string): DiagnosticOrder[] {
-  const recommended = getRecommendedDiagnostics(symptoms);
-  if (recommended.length === 0) return [];
-
-  const order = createOrder({
-    patientId,
-    facilityId,
-    triageId,
-    tests: recommended,
-    priority: 'URGENT',
-    orderedBy,
-    notes: `Auto-generated from triage ${triageId}`,
-  });
-
-  return [order];
 }
 
 export function seedDemoOrders() {
-  if (orders.size > 0) return;
+  if (diagnosticStore.all().length > 0) return;
 
-  const order1 = createOrder({
+  createOrder({
     patientId: 'patient-1',
     facilityId: 'facility-2',
     triageId: 'triage-demo-1',
@@ -200,19 +210,12 @@ export function seedDemoOrders() {
     orderedBy: 'ASHA-Worker-1',
     notes: 'Suspected malaria/dengue - high fever with body ache',
   });
-  addTestResult(order1.id, 'malaria_rdt', 'Negative', '', 'NORMAL');
-  addTestResult(order1.id, 'dengue_ns1', 'Positive', '', 'ABNORMAL');
-  addTestResult(order1.id, 'cbc', 'WBC: 12,000 | Hgb: 11.2 | Platelets: 1.1L', '', 'ABNORMAL', '<150,000');
-  order1.status = 'COMPLETED';
 
-  const order2 = createOrder({
+  createOrder({
     patientId: 'patient-4',
     facilityId: 'facility-3',
     tests: ['blood_sugar', 'urinalysis'],
     priority: 'ROUTINE',
     orderedBy: 'ASHA-Worker-2',
   });
-  addTestResult(order2.id, 'blood_sugar', '118', 'mg/dL', 'NORMAL', '70-100');
-  addTestResult(order2.id, 'urinalysis', 'Negative for glucose/protein', '', 'NORMAL');
-  order2.status = 'COMPLETED';
 }

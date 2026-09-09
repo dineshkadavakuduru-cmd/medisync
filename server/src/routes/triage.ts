@@ -2,7 +2,6 @@ import { FastifyPluginAsync } from 'fastify';
 import { TriageResult, VitalSigns, SymptomEntry, ApiResponse } from '../types/index.js';
 import { assessTriage, SYMPTOM_DATABASE } from '../services/triageService.js';
 import { getAIClinicalSummary } from '../services/aiService.js';
-import { autoOrderDiagnostics } from '../services/diagnosticsService.js';
 
 const triageRoutes: FastifyPluginAsync = async (fastify) => {
   const triageResults = new Map<string, TriageResult>();
@@ -17,7 +16,7 @@ const triageRoutes: FastifyPluginAsync = async (fastify) => {
     };
     Reply: ApiResponse<TriageResult>;
   }>('/api/triage', async (request) => {
-    const { symptoms, patientAge, patientGender, vitalSigns, patientId } = request.body as {
+    const { symptoms, patientAge, patientGender, vitalSigns } = request.body as {
       symptoms: string[];
       patientAge: number;
       patientGender: string;
@@ -32,10 +31,6 @@ const triageRoutes: FastifyPluginAsync = async (fastify) => {
     const id = `triage-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
     triageResult.id = id;
     triageResults.set(id, triageResult);
-
-    if (patientId && triageResult.recommendedDiagnostics.length > 0) {
-      autoOrderDiagnostics(id, patientId, 'facility-2', symptoms, 'ASHA-Worker-1');
-    }
 
     return { success: true, data: triageResult };
   });

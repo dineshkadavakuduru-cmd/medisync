@@ -19,6 +19,7 @@ export function createEmergencyAlert(
 }
 
 export function sendMultiChannelAlert(alert: Alert): void {
+  void alert;
   console.log('Sending push notification...');
   console.log('Sending SMS...');
   console.log('Broadcasting WebSocket...');

@@ -8,7 +8,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { COLORS, TriageSeverity, ReferralStatus } from '@medisync/shared';
+import { COLORS, TriageSeverity } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
@@ -26,7 +26,7 @@ export const ReferralSuccessScreen: React.FC = () => {
       tension: 100,
       useNativeDriver: true,
     }).start();
-  }, []);
+  }, [scaleAnim]);
 
   const severity = referral?.severity as TriageSeverity || TriageSeverity.GREEN;
   const severityConfig: Record<TriageSeverity, { color: string; label: string }> = {

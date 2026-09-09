@@ -2,12 +2,14 @@
   "name": "medisync-server",
   "version": "1.0.0",
   "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "lint": "eslint . --ext .ts",
+    "start": "node dist/server.js",
+    "test": "tsx --test test/*.test.ts",
+    "test:start": "tsx test/start-smoke.ts",
+    "lint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit",
     "db:setup": "tsx src/database/setup.ts",
     "db:seed": "tsx src/database/seed.ts"

@@ -1,144 +1,54 @@
 import { FastifyPluginAsync } from 'fastify';
-import { DiagnosticOrder, TestResult, TestFlag, ApiResponse } from '../types/index.js';
+import { z } from 'zod';
+import { ApiError, emptyQuery, idParams, idSchema, validationErrors } from '../validation.js';
 import {
-  createOrder,
-  getOrder,
-  getAllOrders,
-  getOrdersByFacility,
-  getOrdersByPatient,
-  addTestResult,
-  updateOrderStatus,
-  getTestsCatalog,
-  seedDemoOrders,
+  createOrder, getOrder, getAllOrders, addTestResult, updateOrderStatus,
+  getTestsCatalog, orderSchema, resultSchema, diagnosticStatusSchema, diagnosticStore,
 } from '../services/diagnosticsService.js';
 
-const diagnosticsRoutes: FastifyPluginAsync = async (fastify) => {
-  seedDemoOrders();
-
-  fastify.get<{
-    Reply: ApiResponse<{ code: string; name: string; unit: string; normalRange: string }[]>;
-  }>('/api/diagnostics/tests', async () => {
-    const catalog = getTestsCatalog().map((t) => ({ code: t.code, name: t.name, unit: t.unit, normalRange: t.normalRange }));
-    return { success: true, data: catalog };
+const diagnosticsRoutes: FastifyPluginAsync = async fastify => {
+  validationErrors(fastify);
+  fastify.get('/api/diagnostics/tests', async request => {
+    emptyQuery.parse(request.query);
+    return { success: true, data: getTestsCatalog().map(({ code, name, unit, normalRange }) => ({ code, name, unit, normalRange })) };
   });
-
-  fastify.get<{
-    Querystring: { facilityId?: string; patientId?: string; status?: string };
-    Reply: ApiResponse<DiagnosticOrder[]>;
-  }>('/api/diagnostics/orders', async (request) => {
-    const { facilityId, patientId, status } = request.query as { facilityId?: string; patientId?: string; status?: string };
-
-    let orders: DiagnosticOrder[];
-    if (patientId) {
-      orders = getOrdersByPatient(patientId);
-    } else if (facilityId) {
-      orders = getOrdersByFacility(facilityId, status);
-    } else {
-      orders = getAllOrders();
-    }
-
-    return { success: true, data: orders };
+  fastify.get('/api/diagnostics/orders', async request => {
+    const { facilityId, patientId, status } = z.object({ facilityId: idSchema.optional(), patientId: idSchema.optional(), status: diagnosticStatusSchema.optional() }).strict().parse(request.query);
+    return { success: true, data: getAllOrders().filter(order => (!facilityId || order.facilityId === facilityId) && (!patientId || order.patientId === patientId) && (!status || order.status === status)) };
   });
-
-  fastify.get<{
-    Params: { id: string };
-    Reply: ApiResponse<DiagnosticOrder>;
-  }>('/api/diagnostics/orders/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const order = getOrder(id);
-
-    if (!order) {
-      return reply.status(404).send({ success: false, error: 'Diagnostic order not found' });
-    }
-
+  fastify.get('/api/diagnostics/orders/:id', async request => {
+    emptyQuery.parse(request.query);
+    const order = getOrder(idParams.parse(request.params).id);
+    if (!order) throw new ApiError(404, 'Diagnostic order not found');
     return { success: true, data: order };
   });
-
-  fastify.post<{
-    Body: {
-      patientId: string;
-      facilityId: string;
-      triageId?: string;
-      referralId?: string;
-      tests: string[];
-      priority?: string;
-      orderedBy: string;
-      notes?: string;
-    };
-    Reply: ApiResponse<DiagnosticOrder>;
-  }>('/api/diagnostics/orders', async (request, reply) => {
-    const body = request.body as {
-      patientId: string;
-      facilityId: string;
-      triageId?: string;
-      referralId?: string;
-      tests: string[];
-      priority?: string;
-      orderedBy: string;
-      notes?: string;
-    };
-
-    const order = createOrder({
-      patientId: body.patientId,
-      facilityId: body.facilityId,
-      triageId: body.triageId,
-      referralId: body.referralId,
-      tests: body.tests,
-      priority: body.priority as any,
-      orderedBy: body.orderedBy,
-      notes: body.notes,
+  fastify.post('/api/diagnostics/orders', { bodyLimit: 16384 }, async (request, reply) => {
+    emptyQuery.parse(request.query);
+    const body = orderSchema.parse(request.body);
+    const { data, replayed } = await diagnosticStore.transact(request.headers['idempotency-key'], body, () => createOrder(body, false));
+    return reply.code(201).header('Idempotency-Replayed', String(replayed)).send({ success: true, data });
+  });
+  fastify.patch('/api/diagnostics/orders/:id/result', { bodyLimit: 4096 }, async (request, reply) => {
+    emptyQuery.parse(request.query);
+    const { id } = idParams.parse(request.params);
+    const body = resultSchema.parse(request.body);
+    const { data, replayed } = await diagnosticStore.transact(request.headers['idempotency-key'], { method: 'PATCH', id, operation: 'result', body }, () => {
+      const order = addTestResult(id, body.testCode, body.value, body.unit, body.flag, body.referenceRange, false);
+      if (!order) throw new ApiError(404, 'Diagnostic order not found');
+      return order;
     });
-
-    return reply.code(201).send({ success: true, data: order });
+    return reply.header('Idempotency-Replayed', String(replayed)).send({ success: true, data });
   });
-
-  fastify.patch<{
-    Params: { id: string };
-    Body: { testCode: string; value: string; unit: string; flag: string; referenceRange?: string };
-    Reply: ApiResponse<DiagnosticOrder>;
-  }>('/api/diagnostics/orders/:id/result', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { testCode, value, unit, flag, referenceRange } = request.body as {
-      testCode: string;
-      value: string;
-      unit: string;
-      flag: string;
-      referenceRange?: string;
-    };
-
-    const validFlags = ['NORMAL', 'ABNORMAL', 'CRITICAL'];
-    if (!validFlags.includes(flag)) {
-      return reply.status(400).send({ success: false, error: 'Invalid flag' });
-    }
-
-    const order = addTestResult(id, testCode, value, unit, flag as TestFlag, referenceRange);
-    if (!order) {
-      return reply.status(404).send({ success: false, error: 'Diagnostic order not found' });
-    }
-
-    return { success: true, data: order };
-  });
-
-  fastify.patch<{
-    Params: { id: string };
-    Body: { status: string };
-    Reply: ApiResponse<DiagnosticOrder>;
-  }>('/api/diagnostics/orders/:id/status', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { status } = request.body as { status: string };
-
-    const validStatuses = ['ORDERED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'];
-    if (!validStatuses.includes(status)) {
-      return reply.status(400).send({ success: false, error: 'Invalid status' });
-    }
-
-    const order = updateOrderStatus(id, status as any);
-    if (!order) {
-      return reply.status(404).send({ success: false, error: 'Diagnostic order not found' });
-    }
-
-    return { success: true, data: order };
+  fastify.patch('/api/diagnostics/orders/:id/status', { bodyLimit: 1024 }, async (request, reply) => {
+    emptyQuery.parse(request.query);
+    const { id } = idParams.parse(request.params);
+    const body = z.object({ status: diagnosticStatusSchema }).strict().parse(request.body);
+    const { data, replayed } = await diagnosticStore.transact(request.headers['idempotency-key'], { method: 'PATCH', id, operation: 'status', body }, () => {
+      const order = updateOrderStatus(id, body.status, false);
+      if (!order) throw new ApiError(404, 'Diagnostic order not found');
+      return order;
+    });
+    return reply.header('Idempotency-Replayed', String(replayed)).send({ success: true, data });
   });
 };
-
 export default diagnosticsRoutes;

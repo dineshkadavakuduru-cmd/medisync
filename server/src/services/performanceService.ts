@@ -31,7 +31,7 @@ function getRandomItems(arr: string[], count: number): string[] {
 export function getFacilityPerformance(): FacilityPerformance[] {
   const performances: FacilityPerformance[] = [];
 
-  mockFacilities.forEach((facility, index) => {
+  mockFacilities.forEach((facility) => {
     const medAvail = calculateFacilityMedicineAvailability(facility.id);
     const staff = getStaff(facility.id);
     const totalStaff = staff.length;

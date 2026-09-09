@@ -11,3 +11,9 @@
 **/*.webm
 **/*.log
 medisync-demo.html
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/data
+**/*.tsbuildinfo

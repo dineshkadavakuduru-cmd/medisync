@@ -1,22 +1,35 @@
-import { TeleconsultSession, TeleconsultStatus, Doctor } from '../types/index.js';
+import { TeleconsultSession, TeleconsultStatus, Doctor, DoctorAvailability, Prescription, PrescriptionMedication } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
 import { randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { FileStore } from '../database/fileStore.js';
+import { ApiError } from '../validation.js';
 
 // Single-process demo persistence. Production needs a transactional shared database.
 const storePath = resolve(process.env.TELECONSULT_STORE_PATH || 'data/teleconsult-sessions.json');
-const saved: TeleconsultSession[] = existsSync(storePath) ? JSON.parse(readFileSync(storePath, 'utf8')) : [];
-const sessions = new Map<string, TeleconsultSession>(saved.map((session) => [session.id, session]));
+let store: FileStore<TeleconsultSession> | undefined;
+function sessionStore(): FileStore<TeleconsultSession> {
+  if (!store) {
+    // Preserve sessions shipped in the previous array-format store, atomically.
+    try {
+      if (existsSync(storePath)) {
+        const saved = JSON.parse(readFileSync(storePath, 'utf8'));
+        if (Array.isArray(saved)) {
+          if (saved.some(session => !session || typeof session.id !== 'string')) throw new Error('Invalid legacy sessions');
+          const temporary = `${storePath}.${process.pid}.tmp`;
+          writeFileSync(temporary, JSON.stringify({ records: saved, replays: [] }), { mode: 0o600 });
+          renameSync(temporary, storePath);
+        }
+      }
+    } catch { throw new ApiError(503, 'Teleconsult store unavailable; no write confirmed'); }
+    store = new FileStore<TeleconsultSession>(storePath);
+  }
+  return store;
+}
 
 function persist(session: TeleconsultSession): void {
-  const next = new Map(sessions);
-  next.set(session.id, session);
-  mkdirSync(dirname(storePath), { recursive: true });
-  const temporary = `${storePath}.${process.pid}.tmp`;
-  writeFileSync(temporary, JSON.stringify([...next.values()]), { mode: 0o600 });
-  renameSync(temporary, storePath);
-  sessions.set(session.id, session);
+  sessionStore().save(session);
 }
 
 const DOCTORS: Doctor[] = [
@@ -86,12 +99,11 @@ export function createSession(data: {
 }
 
 export function getSession(id: string): TeleconsultSession | undefined {
-  const session = sessions.get(id);
-  return session ? { ...session } : undefined;
+  return sessionStore().get(id);
 }
 
 export function getAllSessions(): TeleconsultSession[] {
-  return Array.from(sessions.values(), (session) => ({ ...session })).sort(
+  return sessionStore().all().sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 }
@@ -132,33 +144,6 @@ export function updateSessionStatus(
 
 export function getPendingSessionCount(): number {
   return getAllSessions().filter((s) => s.status === 'REQUESTED' || s.status === 'ACCEPTED').length;
-}
-
-export interface DoctorAvailability {
-  doctorId: string;
-  dayOfWeek: number; // 0 = Sunday, 1 = Monday, etc.
-  startTime: string; // HH:MM in 24h format
-  endTime: string;
-  isException: boolean;
-  exceptionDate?: string; // YYYY-MM-DD for exception dates
-}
-
-export interface Prescription {
-  id: string;
-  sessionId: string;
-  patientId: string;
-  doctorId: string;
-  medications: PrescriptionMedication[];
-  notes?: string;
-  createdAt: string;
-}
-
-export interface PrescriptionMedication {
-  name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  instructions?: string;
 }
 
 // Weekly recurring availability for doctors (IST timezone)
@@ -242,18 +227,25 @@ export function createPrescription(data: {
 }): Prescription {
   const session = getSession(data.sessionId);
   if (!session) throw new Error('Session not found');
+  if (!session.patientId || session.patientId !== data.patientId || session.doctorId !== data.doctorId) {
+    throw new Error('Prescription patient and doctor must match the saved session');
+  }
+  if (session.prescription) throw new Error('A prescription is already saved for this session');
+  if (!Array.isArray(data.medications) || !data.medications.length || data.medications.length > 20 || data.medications.some(m =>
+    !m || [m.name, m.dosage, m.frequency, m.duration].some(value => typeof value !== 'string' || !value.trim() || value.length > 160) ||
+    (m.instructions !== undefined && (typeof m.instructions !== 'string' || m.instructions.length > 500))) ||
+    (data.notes !== undefined && (typeof data.notes !== 'string' || data.notes.length > 500))) throw new Error('Invalid prescription');
 
   const prescription: Prescription = {
     id: `rx-${randomBytes(12).toString('hex')}`,
     sessionId: data.sessionId,
-    patientId: data.patientId,
-    doctorId: data.doctorId,
-    medications: data.medications,
+    patientId: session.patientId,
+    doctorId: session.doctorId,
+    medications: structuredClone(data.medications),
     notes: data.notes,
     createdAt: new Date().toISOString(),
   };
 
-  // Store prescription (in production, persist to database)
   session.prescription = prescription;
   persist(session);
   return prescription;
@@ -261,5 +253,13 @@ export function createPrescription(data: {
 
 export function getPrescriptionBySession(sessionId: string): Prescription | undefined {
   const session = getSession(sessionId);
-  return session?.prescription;
+  const rx = session?.prescription;
+  return rx && rx.sessionId === sessionId && rx.patientId === session?.patientId && rx.doctorId === session?.doctorId ? rx : undefined;
+}
+
+export function getPrescriptionsByPatient(patientId: string) {
+  return getAllSessions().filter(session => session.patientId === patientId).flatMap(session => {
+    const prescription = getPrescriptionBySession(session.id);
+    return prescription ? [{ ...prescription, doctorName: session.doctorName, sessionStatus: session.status }] : [];
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }

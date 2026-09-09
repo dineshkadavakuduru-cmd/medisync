@@ -7,7 +7,6 @@ import {
   SafeAreaView,
   TouchableOpacity,
   FlatList,
-  Linking,
   Animated,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +16,7 @@ import { theme } from '../styles/theme';
 import { api, MOCK_FACILITIES } from '../services/api';
 import { wsClient } from '../services/websocket';
 import { useTranslation } from '../i18n';
+import { isDemoActive, onDemoModeChange } from '../services/demoMode';
 
 interface Facility {
   id: string;
@@ -29,14 +29,6 @@ interface Facility {
   specialists: string[];
   contactPhone: string;
   isActive: boolean;
-}
-
-interface DistrictSummary {
-  totalBeds: number;
-  availableBeds: number;
-  avgMedicineAvailability: number;
-  totalStaffOnDuty: number;
-  facilitiesWithCriticalStock: number;
 }
 
 const FACILITY_TYPE_COLORS: Record<FacilityType, string> = {
@@ -56,35 +48,57 @@ const FACILITY_TYPE_LABELS: Record<FacilityType, string> = {
 export const FacilityScreen: React.FC = () => {
   const { t } = useTranslation();
   const navigation = useNavigation<any>();
-  const [facilities, setFacilities] = useState<Facility[]>(MOCK_FACILITIES);
-  const [districtSummary, setDistrictSummary] = useState<DistrictSummary | null>(null);
+  const [demoMode, setDemoMode] = useState(isDemoActive);
+  const [facilities, setFacilities] = useState<Facility[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const loadRequest = useRef(0);
   const [filterType, setFilterType] = useState<FacilityType | 'ALL'>('ALL');
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery] = useState('');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightAnim = useRef(new Animated.Value(0)).current;
 
+  useEffect(() => onDemoModeChange(() => {
+    loadRequest.current++;
+    setFacilities([]);
+    setDemoMode(isDemoActive());
+  }), []);
+
   const loadData = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadError(false);
+    if (demoMode) {
+      setFacilities(MOCK_FACILITIES);
+      setLoading(false);
+      return;
+    }
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
       setLoading(true);
-      const facRes = await api.getFacilities();
-      const facList = (facRes.data || MOCK_FACILITIES) as Facility[];
-      setFacilities(facList);
-    } catch (e) {
-      setFacilities(MOCK_FACILITIES);
+      const facRes = await Promise.race([
+        api.getFacilities(),
+        new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Facility request timed out')), 8000); }),
+      ]);
+      if (!facRes.success || facRes.source === 'sample' || !Array.isArray(facRes.data)) throw new Error('Facilities unavailable');
+      if (request === loadRequest.current) setFacilities(facRes.data as Facility[]);
+    } catch {
+      if (request === loadRequest.current) { setFacilities([]); setLoadError(true); }
     } finally {
-      setLoading(false);
+      clearTimeout(timeout);
+      if (request === loadRequest.current) setLoading(false);
     }
-  }, []);
+  }, [demoMode]);
 
   useEffect(() => {
+    const requests = loadRequest;
     loadData();
+    return () => { requests.current++; };
   }, [loadData]);
 
   useEffect(() => {
-    wsClient.connect();
-    wsClient.on('BED_UPDATE', (msg: any) => {
+    if (demoMode) return;
+    const release = wsClient.connect();
+    const offBeds = wsClient.on('BED_UPDATE', (msg: any) => {
       setHighlightedId(msg.facilityId);
       Animated.sequence([
         Animated.timing(highlightAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
@@ -92,13 +106,13 @@ export const FacilityScreen: React.FC = () => {
       ]).start(() => setHighlightedId(null));
       loadData();
     });
-    wsClient.on('MEDICINE_UPDATE', () => loadData());
-    wsClient.on('STAFF_UPDATE', () => loadData());
-    wsClient.on('ALERT_NEW', () => loadData());
+    const offMedicine = wsClient.on('MEDICINE_UPDATE', () => loadData());
+    const offStaff = wsClient.on('STAFF_UPDATE', () => loadData());
+    const offAlert = wsClient.on('ALERT_NEW', () => loadData());
     return () => {
-      wsClient.disconnect();
+      offBeds(); offMedicine(); offStaff(); offAlert(); release();
     };
-  }, [loadData]);
+  }, [loadData, highlightAnim, demoMode]);
 
   const filtered = facilities.filter((f) => {
     const matchesType = filterType === 'ALL' || f.type === filterType;
@@ -117,19 +131,20 @@ export const FacilityScreen: React.FC = () => {
     <View style={styles.emptyState}>
       <MaterialCommunityIcons name="hospital-building" size={64} color={COLORS.textSecondary} style={styles.emptyIcon} />
       <Text style={styles.emptyTitle}>{loading ? t('facility.loadingFacilities') : t('facility.unableToLoad')}</Text>
-      {!loading && <Text style={styles.emptySubtitle}>{t('facility.checkConnection')}</Text>}
+      {!loading && <Text style={styles.emptySubtitle}>{loadError ? t('facility.checkConnection') : 'No facilities match this filter.'}</Text>}
+      {!loading && loadError && <TouchableOpacity accessibilityRole="button" onPress={loadData} style={styles.filterChip}><Text style={styles.detailsLink}>Retry</Text></TouchableOpacity>}
     </View>
   );
 
   const renderFacilityCard = ({ item }: { item: Facility }) => {
-    const bedPercent = Math.round((item.beds.available / item.beds.total) * 100);
+    const bedPercent = item.beds.total > 0 ? Math.max(0, Math.min(100, Math.round((item.beds.available / item.beds.total) * 100))) : 0;
     const bedColor = bedPercent > 60 ? COLORS.success : bedPercent > 30 ? COLORS.warning : COLORS.severityRed;
     const medColor = item.medicineAvailability > 60 ? COLORS.success : item.medicineAvailability > 30 ? COLORS.warning : COLORS.severityRed;
     const hasCritical = item.medicineAvailability < 60;
 
     return (
       <TouchableOpacity
-        onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id })}
+        onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id, ...(demoMode ? { facility: item, facilitySource: 'sample' } : {}) })}
         style={[
           styles.card,
           hasCritical && { borderTopColor: COLORS.severityRed, borderTopWidth: 3 },
@@ -178,11 +193,11 @@ export const FacilityScreen: React.FC = () => {
         </View>
 
         <View style={styles.cardFooter}>
-          <TouchableOpacity style={styles.phoneRow}>
+          <View style={styles.phoneRow}>
             <MaterialCommunityIcons name="phone-outline" size={16} color={COLORS.primary} style={styles.phoneIcon} />
             <Text style={styles.phoneText}>{item.contactPhone}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity>
+          </View>
+          <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id, ...(demoMode ? { facility: item, facilitySource: 'sample' } : {}) })}>
             <Text style={styles.detailsLink}>{t('facility.viewDetails')} →</Text>
           </TouchableOpacity>
         </View>
@@ -194,6 +209,7 @@ export const FacilityScreen: React.FC = () => {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>{t('facility.title')}</Text>
+        {demoMode && <Text style={styles.demoNotice}>DEMO MODE: Synthetic facility snapshots, not live availability. No server connection or live edits.</Text>}
       </View>
 
       <View style={styles.filterWrapper}>
@@ -235,7 +251,8 @@ export const FacilityScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  container: { flex: 1, minWidth: 0, width: '100%', backgroundColor: COLORS.background },
+  demoNotice: { color: COLORS.textSecondary, fontSize: 13, lineHeight: 20, marginTop: 8 },
   header: {
     paddingHorizontal: 16,
     paddingTop: 16,
@@ -247,6 +264,8 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
   },
   filterWrapper: {
+    minWidth: 0,
+    maxWidth: '100%',
     marginBottom: 12,
   },
   filterScrollContent: {
@@ -302,21 +321,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#F0F0F0',
   },
-  cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.md },
+   cardHeader: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.xs, alignItems: 'center', justifyContent: 'space-between', marginBottom: theme.spacing.md },
   cardName: { fontSize: theme.typography.fontSize.lg, fontWeight: theme.typography.fontWeight.bold, color: COLORS.textPrimary, flex: 1, marginRight: theme.spacing.sm },
   typeBadge: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full },
   typeBadgeText: { fontSize: theme.typography.fontSize.xs, fontWeight: '600' },
-  meterRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
+  meterRow: { flexDirection: 'row', flexWrap: 'wrap', rowGap: theme.spacing.xs, alignItems: 'center', marginBottom: theme.spacing.sm },
   meterIcon: { marginRight: theme.spacing.sm },
-  meterLabel: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginRight: theme.spacing.sm, minWidth: 110 },
-  meterBarBg: { flex: 1, height: 6, backgroundColor: COLORS.border, borderRadius: theme.borderRadius.full, overflow: 'hidden' },
+  meterLabel: { fontSize: theme.typography.fontSize.sm, color: COLORS.textSecondary, marginRight: theme.spacing.sm, flexShrink: 1, maxWidth: '100%' },
+  meterBarBg: { flexGrow: 1, flexBasis: 60, height: 6, backgroundColor: COLORS.border, borderRadius: theme.borderRadius.full, overflow: 'hidden' },
   meterBar: { height: '100%', borderRadius: theme.borderRadius.full },
   criticalText: { fontSize: theme.typography.fontSize.xs, color: COLORS.severityRed, fontWeight: '600', marginLeft: theme.spacing.sm },
-  criticalTextContainer: { flexDirection: 'row', alignItems: 'center' },
-  staffRow: { flexDirection: 'row', alignItems: 'center', marginBottom: theme.spacing.sm },
-  specialistChip: { backgroundColor: COLORS.primaryLight, paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full, marginLeft: theme.spacing.xs },
+  criticalTextContainer: { flexDirection: 'row', flexShrink: 1, alignItems: 'center' },
+  staffRow: { flexDirection: 'row', flexWrap: 'wrap', rowGap: theme.spacing.xs, alignItems: 'center', marginBottom: theme.spacing.sm },
+  specialistChip: { maxWidth: '100%', flexShrink: 1, backgroundColor: COLORS.primaryLight, paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xs, borderRadius: theme.borderRadius.full, marginLeft: theme.spacing.xs },
   specialistText: { fontSize: theme.typography.fontSize.xs, color: COLORS.primary, fontWeight: '500' },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: theme.spacing.sm },
+  cardFooter: { flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm, alignItems: 'center', justifyContent: 'space-between', paddingTop: theme.spacing.sm, borderTopWidth: 1, borderTopColor: COLORS.border, marginTop: theme.spacing.sm },
   phoneRow: { flexDirection: 'row', alignItems: 'center' },
   phoneIcon: { marginRight: theme.spacing.xs },
   phoneText: { fontSize: theme.typography.fontSize.sm, color: COLORS.primary, fontWeight: '500' },

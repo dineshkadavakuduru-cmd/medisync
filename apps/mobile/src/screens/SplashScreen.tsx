@@ -37,7 +37,7 @@ export const SplashScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }, 2500);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [fadeAnim, navigation, scaleAnim]);
 
   return (
     <View style={styles.container}>

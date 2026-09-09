@@ -7,7 +7,6 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Linking,
-  Animated,
 } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';

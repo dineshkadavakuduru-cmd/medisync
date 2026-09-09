@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,28 +11,33 @@ import {
   Modal,
   Platform,
 } from 'react-native';
-import { COLORS, Patient as PatientType } from '@medisync/shared';
+import { COLORS } from '@medisync/shared';
+import { useNavigation, NavigationProp } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '../styles/theme';
-import { api } from '../services/api';
+import { patientClient } from '../services/patientClient';
+import type { JourneyPatient } from '../services/patientHelpers';
+import { syncService } from '../services/syncService';
+import { initDemoMode, isDemoActive, onDemoModeChange } from '../services/demoMode';
 import { useTranslation } from '../i18n';
+import { patientJourney, patientJourneyError, PatientJourneyError } from '../i18n/patientJourney';
 
-const FILTERS = ['all', 'recent', 'highRisk', 'referred'] as const;
-
-const MOCK_PATIENTS: PatientType[] = [
-  { id: 'p1', abhaId: 'ABHA-PN-2024-0001', name: 'Sunita Khade', age: 28, gender: 'FEMALE', phone: '9876543210', village: 'Khadki', district: 'Pune', languagePreference: 'mr', createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() },
-  { id: 'p2', abhaId: 'ABHA-PN-2024-0002', name: 'Ramesh Pawar', age: 55, gender: 'MALE', phone: '9765432109', village: 'Pimpri', district: 'Pune', languagePreference: 'mr', createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString() },
-  { id: 'p3', abhaId: 'ABHA-PN-2024-0003', name: 'Anjali Deshmukh', age: 34, gender: 'FEMALE', phone: '9654321098', village: 'Chinchwad', district: 'Pune', languagePreference: 'hi', createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString() },
-  { id: 'p4', abhaId: 'ABHA-PN-2024-0004', name: 'Vijay Shinde', age: 62, gender: 'MALE', phone: '9543210987', village: 'Hadapsar', district: 'Pune', languagePreference: 'mr', createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString() },
-  { id: 'p5', abhaId: 'ABHA-PN-2024-0005', name: 'Priya More', age: 22, gender: 'FEMALE', phone: '9432109876', village: 'Bhosari', district: 'Pune', languagePreference: 'mr', createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() },
-];
-
-const generateAbhaId = () => `ABHA-PN-2024-${String(Math.floor(Math.random() * 9000) + 1000)}`;
+const FILTERS = ['all', 'recent'] as const;
 
 export const PatientsScreen: React.FC = () => {
-  const { t } = useTranslation();
-  const [patients, setPatients] = useState<PatientType[]>([]);
+  const { t, language } = useTranslation();
+  const copy = patientJourney[language];
+  const navigation = useNavigation<NavigationProp<{ PatientDetail: { patientId: string } }>>();
+  const [patients, setPatients] = useState<JourneyPatient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+  const [saveError, setSaveError] = useState<unknown>(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [demo, setDemo] = useState(isDemoActive);
+  const [ready, setReady] = useState(false);
+  const [pending, setPending] = useState(patientClient.getPendingPatients);
+  const [refresh, setRefresh] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -43,33 +48,52 @@ export const PatientsScreen: React.FC = () => {
   const [formVillage, setFormVillage] = useState('');
   const [formAbhaId, setFormAbhaId] = useState('');
   const [formPhone, setFormPhone] = useState('');
+  const [formDistrict, setFormDistrict] = useState('');
+  const [formTrimester, setFormTrimester] = useState('');
+  const [formLastVisit, setFormLastVisit] = useState('');
+  const [formNextVisit, setFormNextVisit] = useState('');
+  const [formLanguage, setFormLanguage] = useState<'en' | 'hi' | 'mr'>('mr');
 
   useEffect(() => {
-    loadPatients();
-  }, []);
+    let active = true;
+    void initDemoMode().then(() => { if (active) { setDemo(isDemoActive()); setReady(true); } }).catch(e => { if (active) { setError(e); setLoading(false); } });
+    const stopMode = onDemoModeChange(() => { setDemo(isDemoActive()); setShowAddModal(false); });
+    const stopQueue = syncService.subscribe(() => {
+      setPending(patientClient.getPendingPatients());
+      if (!syncService.isSyncing()) setRefresh(value => value + 1);
+    });
+    const stopFocus = navigation.addListener('focus', () => setRefresh(value => value + 1));
+    return () => { active = false; stopMode(); stopQueue(); stopFocus(); };
+  }, [navigation]);
 
-  const loadPatients = async () => {
+  useEffect(() => {
+    if (!ready || demo) return;
+    let active = true;
+    void syncService.init().catch(e => { if (active) setError(e); });
+    return () => { active = false; };
+  }, [ready, demo]);
+
+  useEffect(() => {
+    if (!ready) return;
+    let active = true;
     setLoading(true);
-    try {
-      const response = await api.getPatients();
-      setPatients(response.data || []);
-    } catch (e) {
-      console.error(e);
-      setPatients(MOCK_PATIENTS);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setPatients([]);
+    setError('');
+    void patientClient.getPatients(demo ? 'demo' : 'live').then(data => {
+      if (active) setPatients(data);
+    }).catch(e => { if (active) setError(e); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [ready, demo, refresh]);
 
   const filtered = patients.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.abhaId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (p.abhaId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.village.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchesSearch) return false;
     if (activeFilter === 'all') return true;
     if (activeFilter === 'recent') return new Date(p.createdAt) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    if (activeFilter === 'highRisk') return p.village.length > 0;
-    if (activeFilter === 'referred') return false;
     return true;
   });
 
@@ -80,29 +104,37 @@ export const PatientsScreen: React.FC = () => {
     setFormAge('');
     setFormGender('');
     setFormVillage('');
-    setFormAbhaId(generateAbhaId());
+    setFormAbhaId('');
     setFormPhone('');
+    setFormDistrict('');
+    setFormTrimester('');
+    setFormLastVisit('');
+    setFormNextVisit('');
+    setFormLanguage('mr');
+    setSaveError('');
     setShowAddModal(true);
   };
 
-  const handleSavePatient = () => {
-    if (!formName.trim() || !formAge.trim() || !formGender || !formVillage.trim() || !formPhone.trim()) {
-      return;
-    }
-    const newPatient: PatientType = {
-      id: `p${Date.now()}`,
-      abhaId: formAbhaId || generateAbhaId(),
-      name: formName.trim(),
-      age: parseInt(formAge, 10) || 0,
-      gender: formGender as PatientType['gender'],
-      phone: formPhone.trim(),
-      village: formVillage.trim(),
-      district: 'Pune',
-      languagePreference: 'mr',
-      createdAt: new Date().toISOString(),
-    };
-    setPatients((prev) => [newPatient, ...prev]);
-    setShowAddModal(false);
+  const handleSavePatient = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      if (!/^\d+$/.test(formAge.trim())) throw new PatientJourneyError('ageError');
+      if (!formGender) throw new PatientJourneyError('genderError');
+      if (demo !== isDemoActive()) throw new PatientJourneyError('modeError');
+      await patientClient.createPatient({
+        abhaId: formAbhaId, name: formName, age: Number(formAge), gender: formGender,
+        phone: formPhone, village: formVillage, district: formDistrict, languagePreference: formLanguage,
+        ...(formTrimester.trim() ? { trimester: Number(formTrimester) } : {}),
+        ...(formLastVisit.trim() ? { lastVisit: formLastVisit.trim() } : {}),
+        ...(formNextVisit.trim() ? { nextVisitDate: formNextVisit.trim() } : {}),
+      }, demo ? 'demo' : 'live');
+      setShowAddModal(false);
+      setRefresh(value => value + 1);
+    } catch (e) { setSaveError(e); }
+    finally { savingRef.current = false; setSaving(false); }
   };
 
   const EmptyState = () => (
@@ -122,9 +154,9 @@ export const PatientsScreen: React.FC = () => {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.headerTitle}>{t('patients.title')}</Text>
-          <Text style={styles.headerSubtitle}>{t('patients.all')}</Text>
+          <Text style={styles.headerSubtitle}>{demo ? copy.demoSource : copy.liveSource}</Text>
         </View>
-        <TouchableOpacity style={styles.headerAddButton} onPress={openAddModal}>
+        <TouchableOpacity style={styles.headerAddButton} disabled={!ready} onPress={openAddModal}>
           <Text style={styles.headerAddText}>+ {t('patients.addPatient')}</Text>
         </TouchableOpacity>
       </View>
@@ -160,8 +192,29 @@ export const PatientsScreen: React.FC = () => {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        refreshing={loading}
+        onRefresh={() => setRefresh(value => value + 1)}
+        ListHeaderComponent={<View>
+          {loading && <Text style={styles.emptySubtitle}>{t('common.loading')}</Text>}
+          {!!error && <Text accessibilityRole="alert" style={styles.emptySubtitle}>{patientJourneyError(error, language, 'loadError')} {copy.noFallback}</Text>}
+          <TouchableOpacity onPress={() => setRefresh(value => value + 1)}><Text style={styles.filterText}>{copy.refreshPatients}</Text></TouchableOpacity>
+          {!demo && pending.length > 0 && <View style={styles.formField}>
+            <Text style={styles.emptyTitle}>{copy.pendingHeading}</Text>
+            {pending.map(action => <View key={action.id} style={styles.patientCard}>
+              <View style={styles.patientInfo}>
+                <Text style={styles.patientName}>{String(action.payload.name || copy.patient)}</Text>
+                <Text style={styles.patientMeta}>{copy.localAction}: {action.id}</Text>
+                <Text style={styles.patientMeta}>{copy[action.status]}{action.error ? `: ${copy.syncError}` : ''}</Text>
+                <Text style={styles.patientMeta}>{copy.pendingHint}</Text>
+              </View>
+            </View>)}
+            <TouchableOpacity disabled={syncService.isSyncing()} onPress={() => { void syncService.syncAll().catch(e => setError(e)); }}>
+              <Text style={styles.filterText}>{copy.retrySync}</Text>
+            </TouchableOpacity>
+          </View>}
+        </View>}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.patientCard} onPress={() => {}} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.patientCard} onPress={() => navigation.navigate('PatientDetail', { patientId: item.id })} activeOpacity={0.7}>
             <View style={styles.patientLeft}>
               <View style={styles.avatar}>
                 <Text style={styles.avatarText}>{getInitials(item.name)}</Text>
@@ -169,43 +222,45 @@ export const PatientsScreen: React.FC = () => {
               <View style={styles.patientInfo}>
                 <Text style={styles.patientName} numberOfLines={1}>{item.name}</Text>
                 <Text style={styles.patientMeta} numberOfLines={1}>
-                  {item.age} yrs • {item.gender} • {item.village}
+                  {item.age} {copy.years} • {copy[item.gender]} • {item.village}
                 </Text>
               </View>
             </View>
             <View style={styles.abhaBadge}>
-              <Text style={styles.abhaLabel}>ABHA ID</Text>
-              <Text style={styles.abhaId} numberOfLines={1}>{item.abhaId}</Text>
+              <Text style={styles.abhaLabel}>{item.abhaId ? copy.abha : copy.localId}</Text>
+              <Text style={styles.abhaId} numberOfLines={1}>{item.abhaId || item.id}</Text>
             </View>
           </TouchableOpacity>
         )}
-        ListEmptyComponent={<EmptyState />}
+        ListEmptyComponent={!loading && !error ? <EmptyState /> : null}
       />
 
-      <Modal visible={showAddModal} animationType="slide" transparent={true}>
-        <View style={styles.modalOverlay} onTouchStart={() => setShowAddModal(false)}>
-          <View style={styles.modalContent} onTouchStart={(e) => e.stopPropagation()}>
+      <Modal visible={showAddModal} animationType="slide" transparent={true} onRequestClose={() => { if (!saving) setShowAddModal(false); }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{t('patients.addPatient')}</Text>
-            <TouchableOpacity onPress={() => setShowAddModal(false)}>
+            <TouchableOpacity disabled={saving} onPress={() => setShowAddModal(false)}>
               <MaterialCommunityIcons name="close" size={24} color={COLORS.textSecondary} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>{t('patients.searchPlaceholder').replace('Search by ', '').replace('...', '')}</Text>
+              <Text style={styles.formLabel}>{copy.name}</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="Name"
+                placeholder={copy.name}
+                accessibilityLabel={copy.name}
                 value={formName}
                 onChangeText={setFormName}
                 placeholderTextColor={COLORS.textSecondary}
               />
             </View>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Age</Text>
+              <Text style={styles.formLabel}>{copy.age}</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="Age"
+                placeholder={copy.age}
+                accessibilityLabel={copy.age}
                 keyboardType="numeric"
                 value={formAge}
                 onChangeText={setFormAge}
@@ -213,7 +268,7 @@ export const PatientsScreen: React.FC = () => {
               />
             </View>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Gender</Text>
+              <Text style={styles.formLabel}>{copy.gender}</Text>
               <View style={styles.genderRow}>
                 {(['MALE', 'FEMALE', 'OTHER'] as const).map((g) => (
                   <TouchableOpacity
@@ -223,57 +278,78 @@ export const PatientsScreen: React.FC = () => {
                     activeOpacity={0.8}
                   >
                     <Text style={[styles.genderButtonText, formGender === g && styles.genderButtonTextActive]}>
-                      {g === 'MALE' ? 'Male' : g === 'FEMALE' ? 'Female' : 'Other'}
+                      {copy[g]}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
             </View>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Village</Text>
+              <Text style={styles.formLabel}>{copy.village}</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="Village"
+                placeholder={copy.village}
+                accessibilityLabel={copy.village}
                 value={formVillage}
                 onChangeText={setFormVillage}
                 placeholderTextColor={COLORS.textSecondary}
               />
             </View>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>ABHA ID</Text>
+              <Text style={styles.formLabel}>{copy.abhaOptional}</Text>
               <View style={styles.abhaRow}>
                 <TextInput
                   style={[styles.formInput, { flex: 1 }]}
-                  placeholder="ABHA ID"
+                  placeholder={copy.abhaHint}
+                  accessibilityLabel={copy.abhaOptional}
                   value={formAbhaId}
                   onChangeText={setFormAbhaId}
                   placeholderTextColor={COLORS.textSecondary}
                 />
-                <TouchableOpacity style={styles.abhaGenerateButton} onPress={() => setFormAbhaId(generateAbhaId())}>
-                  <Text style={styles.abhaGenerateText}>Auto</Text>
-                </TouchableOpacity>
               </View>
             </View>
             <View style={styles.formField}>
-              <Text style={styles.formLabel}>Phone</Text>
+              <Text style={styles.formLabel}>{copy.phone}</Text>
               <TextInput
                 style={styles.formInput}
-                placeholder="Phone"
+                placeholder={copy.phone}
+                accessibilityLabel={copy.phone}
                 keyboardType="phone-pad"
                 value={formPhone}
                 onChangeText={setFormPhone}
                 placeholderTextColor={COLORS.textSecondary}
               />
             </View>
+            {[
+              { label: copy.district, value: formDistrict, change: setFormDistrict },
+              { label: copy.trimesterInput, value: formTrimester, change: setFormTrimester },
+              { label: copy.lastVisitInput, value: formLastVisit, change: setFormLastVisit },
+              { label: copy.nextVisitInput, value: formNextVisit, change: setFormNextVisit },
+            ].map(field => <View key={field.label} style={styles.formField}>
+              <Text style={styles.formLabel}>{field.label}</Text>
+              <TextInput accessibilityLabel={field.label} style={styles.formInput} value={field.value} onChangeText={field.change} />
+            </View>)}
+            <View style={styles.formField}>
+              <Text style={styles.formLabel}>{copy.language}</Text>
+              <View style={styles.genderRow}>
+                {(['en', 'hi', 'mr'] as const).map(value => <TouchableOpacity key={value}
+                  style={[styles.genderButton, formLanguage === value && styles.genderButtonActive]} onPress={() => setFormLanguage(value)}>
+                  <Text style={[styles.genderButtonText, formLanguage === value && styles.genderButtonTextActive]}>{copy[value]}</Text>
+                </TouchableOpacity>)}
+              </View>
+            </View>
+            {!!saveError && <Text accessibilityRole="alert" style={styles.emptySubtitle}>{patientJourneyError(saveError, language, 'saveError')}</Text>}
+            <Text style={styles.formLabel}>{demo ? copy.demoSave : copy.liveSave}</Text>
             <TouchableOpacity
               style={[
                 styles.modalSaveButton,
                 (!formName.trim() || !formAge.trim() || !formGender || !formVillage.trim() || !formPhone.trim()) && styles.modalSaveButtonDisabled,
               ]}
               onPress={handleSavePatient}
+              disabled={saving}
               activeOpacity={0.8}
             >
-              <Text style={styles.modalSaveText}>{t('common.save')} Patient</Text>
+              <Text style={styles.modalSaveText}>{saving ? copy.saving : t('common.save')}</Text>
             </TouchableOpacity>
           </ScrollView>
         </View>

@@ -1,4 +1,5 @@
 import { WSMessageType, WSMessage } from '@medisync/shared';
+import { isDemoActive, onDemoModeChange } from './demoMode';
 
 export type { WSMessageType };
 
@@ -6,27 +7,72 @@ type Listener = (data: unknown) => void;
 
 class WSClient {
   private ws: WebSocket | null = null;
-  private readonly url: string;
   private listeners: Map<string, Listener[]> = new Map();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private facilityId?: string;
+  private connections = new Map<symbol, string | undefined>();
 
-  constructor(url: string) {
-    this.url = url;
+  private getUrl(): string | null {
+    if (isDemoActive()) return null;
+    try {
+      const configured = process.env.EXPO_PUBLIC_API_URL?.trim();
+      if (!configured) return null;
+      const url = new URL(configured);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash || !['/', '/api', '/api/'].includes(url.pathname)) return null;
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = '/ws';
+      return url.toString();
+    } catch {
+      return null;
+    }
   }
 
   connect(facilityId?: string) {
-    this.facilityId = facilityId;
+    if (!this.getUrl()) {
+      this.disconnect();
+      return () => {};
+    }
+    const token = Symbol();
+    this.connections.set(token, facilityId);
+    this.open();
+    this.subscribe();
+    return () => {
+      this.connections.delete(token);
+      if (!this.connections.size) this.disconnect();
+      else this.subscribe();
+    };
+  }
+
+  private subscribe() {
+    if (this.ws?.readyState !== WebSocket.OPEN) return;
+    const facilities = new Set(this.connections.values());
+    // A list screen and detail screen can coexist; subscribe globally in that case.
+    const facilityId = facilities.size === 1 ? facilities.values().next().value : undefined;
+    this.ws.send(JSON.stringify({ action: 'subscribe', facilityId }));
+  }
+
+  private open() {
+    const url = this.getUrl();
+    if (!url || !this.connections.size) { this.disconnect(); return; }
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
-    this.ws = new WebSocket(this.url);
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = null;
+    let socket: WebSocket;
+    try {
+      socket = new WebSocket(url);
+    } catch {
+      this.reconnectTimer = setTimeout(() => this.open(), 3000);
+      return;
+    }
+    this.ws = socket;
 
-    this.ws.onopen = () => {
-      this.ws?.send(JSON.stringify({ action: 'subscribe', facilityId: this.facilityId }));
+    socket.onopen = () => {
+      if (this.ws === socket) this.subscribe();
     };
 
-    this.ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (this.ws !== socket || isDemoActive()) return;
       try {
         const msg = JSON.parse(event.data) as WSMessage;
         const handlers = this.listeners.get(msg.type) || [];
@@ -38,18 +84,21 @@ class WSClient {
       }
     };
 
-    this.ws.onclose = () => {
-      this.reconnectTimer = setTimeout(() => this.connect(this.facilityId), 3000);
+    socket.onclose = () => {
+      if (this.ws !== socket) return;
+      this.ws = null;
+      if (this.connections.size && this.getUrl()) this.reconnectTimer = setTimeout(() => this.open(), 3000);
     };
 
-    this.ws.onerror = () => {
-      this.ws?.close();
+    socket.onerror = () => {
+      socket.close();
     };
   }
 
   on(type: WSMessageType | '*', callback: Listener) {
     if (!this.listeners.has(type)) this.listeners.set(type, []);
     this.listeners.get(type)!.push(callback);
+    return () => this.off(type, callback);
   }
 
   off(type: WSMessageType | '*', callback: Listener) {
@@ -59,9 +108,17 @@ class WSClient {
 
   disconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.ws?.close();
+    this.reconnectTimer = null;
+    this.connections.clear();
+    const socket = this.ws;
     this.ws = null;
+    if (socket) {
+      // Intentional close must never schedule a reconnect or deliver stale messages.
+      socket.onopen = socket.onmessage = socket.onclose = socket.onerror = null;
+      socket.close();
+    }
   }
 }
 
-export const wsClient = new WSClient('ws://10.0.2.2:3001/ws');
+export const wsClient = new WSClient();
+onDemoModeChange(() => wsClient.disconnect());

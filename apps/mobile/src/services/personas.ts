@@ -11,7 +11,7 @@ export interface Persona {
   facility: string;
   staffId: string;
   shiftOrAbha: string;
-  syncStatus: string;
+  dataLabel: string;
   avatarColor: string;
   accent: string;
   greetingTitle: string;
@@ -28,7 +28,7 @@ export const PERSONAS: Record<UserRole, Persona> = {
     facility: 'Mulshi PHC (Pune)',
     staffId: 'MH-PUN-DOC-401',
     shiftOrAbha: 'Night Duty (20:00 - 08:00)',
-    syncStatus: '✓ 100% Synced',
+    dataLabel: 'Demo persona - synthetic data',
     avatarColor: '#00695C',
     accent: '#00695C',
     greetingTitle: 'Good Morning, Dr. Sharma 🌅',
@@ -43,7 +43,7 @@ export const PERSONAS: Record<UserRole, Persona> = {
     facility: 'Sub-Centre Khed (Velhe)',
     staffId: 'MH-PUN-ASHA-108',
     shiftOrAbha: 'Field Shift (08:00 - 16:00)',
-    syncStatus: '✓ 100% Synced (18 Cached)',
+    dataLabel: 'Demo persona - synthetic data',
     avatarColor: '#6A1B9A',
     accent: '#6A1B9A',
     greetingTitle: 'Good Morning, Sunita Didi 👩‍⚕️',
@@ -57,8 +57,8 @@ export const PERSONAS: Record<UserRole, Persona> = {
     title: 'Registered Beneficiary',
     facility: 'Mulshi PHC (Pune)',
     staffId: 'ABHA: 91-4231-8902-1245',
-    shiftOrAbha: 'ABHA Card Verified',
-    syncStatus: '✓ PHR Connected',
+    shiftOrAbha: 'Demo ABHA - not verified',
+    dataLabel: 'Demo persona - PHR not connected',
     avatarColor: '#1565C0',
     accent: '#1565C0',
     greetingTitle: 'Namaste, Ramesh Ji 🙏',
@@ -73,7 +73,7 @@ export const PERSONAS: Record<UserRole, Persona> = {
     facility: 'Pune District Command Centre',
     staffId: 'MH-GOV-ADMIN-01',
     shiftOrAbha: 'Command Duty (24/7 Monitored)',
-    syncStatus: '✓ 10 PHCs Connected',
+    dataLabel: 'Demo persona - synthetic data',
     avatarColor: '#C62828',
     accent: '#C62828',
     greetingTitle: 'District Command Centre 🏛️',
@@ -88,7 +88,7 @@ export const PERSONAS: Record<UserRole, Persona> = {
     facility: 'Mulshi PHC (Pune)',
     staffId: 'MH-PUN-PHA-001',
     shiftOrAbha: 'Morning Shift (08:00 - 16:00)',
-    syncStatus: '✓ 100% Synced',
+    dataLabel: 'Demo persona - synthetic data',
     avatarColor: '#FF6F00',
     accent: '#FF6F00',
     greetingTitle: 'Good Morning, Rajesh 👨‍🔬',
@@ -100,17 +100,28 @@ const ACTIVE_PERSONA_KEY = 'medisync_active_persona';
 
 let currentRole: UserRole = 'DOCTOR';
 const listeners: Array<(persona: Persona) => void> = [];
+let initialization: Promise<Persona> | undefined;
+let roleRevision = 0;
+let pendingSave: Promise<void> = Promise.resolve();
 
-export async function initActivePersona(): Promise<Persona> {
-  try {
-    const saved = await AsyncStorage.getItem(ACTIVE_PERSONA_KEY);
-    if (saved && (saved in PERSONAS)) {
-      currentRole = saved as UserRole;
-    }
-  } catch (e) {
-    // fallback to doctor
+export function initActivePersona(): Promise<Persona> {
+  if (!initialization) {
+    const revision = roleRevision;
+    initialization = (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(ACTIVE_PERSONA_KEY);
+        // A delayed storage read must not undo a role chosen during startup.
+        if (revision === roleRevision && saved && Object.prototype.hasOwnProperty.call(PERSONAS, saved)) {
+          currentRole = saved as UserRole;
+          listeners.forEach((listener) => listener(getActivePersona()));
+        }
+      } catch {
+        // Keep the current session persona when storage is unavailable.
+      }
+      return getActivePersona();
+    })();
   }
-  return PERSONAS[currentRole];
+  return initialization;
 }
 
 export function getActivePersona(): Persona {
@@ -118,15 +129,16 @@ export function getActivePersona(): Persona {
 }
 
 export async function setActivePersona(role: UserRole): Promise<Persona> {
+  roleRevision += 1;
   currentRole = role;
-  try {
-    await AsyncStorage.setItem(ACTIVE_PERSONA_KEY, role);
-  } catch (e) {
-    console.error(e);
-  }
   const persona = PERSONAS[role];
   listeners.forEach((l) => l(persona));
-  return persona;
+  // Publish immediately; serialize persistence so rapid selections save in order.
+  pendingSave = pendingSave.then(() => AsyncStorage.setItem(ACTIVE_PERSONA_KEY, role)).catch(() => {
+    console.warn('Could not save demo persona; the selection applies to this session only.');
+  });
+  await pendingSave;
+  return getActivePersona();
 }
 
 export function onPersonaChange(fn: (persona: Persona) => void) {

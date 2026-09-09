@@ -1,6 +1,7 @@
 {
   "common": {
     "home": "Home",
+    "more": "More",
     "triage": "Triage",
     "teleconsult": "Teleconsult",
     "appointments": "Appts",
@@ -21,6 +22,26 @@
     "noData": "No data available"
   },
   "dashboard": {
+    "sampleSource": "Source: sample data, not live clinical records. Shown when server data is unavailable or for demo persona cards.",
+    "serverSource": "Source: last loaded server data, not independently verified.",
+    "staleSource": "Source: last loaded server data. Refresh failed; these values may be outdated.",
+    "viewOnly": "View only. Card details and actions are not available here.",
+    "demoMode": "Demo mode",
+    "openProfile": "Open profile and demo settings",
+    "goodMorning": "Good Morning, Dr. Sharma",
+    "goodAfternoon": "Good Afternoon, Dr. Sharma",
+    "goodEvening": "Good Evening, Dr. Sharma",
+    "nightDuty": "On Night Duty, Dr. Sharma",
+    "welcome": "Welcome",
+    "fieldScreenings": "Field Screenings",
+    "ancMonitored": "ANC Care Monitored",
+    "activeMedicines": "Active Medicines",
+    "healthIndex": "Sample Health Index",
+    "phcsMonitored": "PHCs Monitored",
+    "bedOccupancy": "Bed Occupancy",
+    "mothersDue": "Mothers Due for Home Visit",
+    "sampleToken": "Sample token #04: approx. 15 min wait at OPD",
+    "districtWaiting": "Patients Waiting Across District PHCs",
     "title": "Dashboard",
     "emergencyEscalation": "Emergency Escalation",
     "todayReferrals": "Today's Referrals",
@@ -74,6 +95,8 @@
     "startFirstTriage": "Start your first AI-powered triage"
   },
   "emergency": {
+    "openSos": "SOS: open emergency form",
+    "sosHint": "SOS opens a form, not a dispatch. For urgent help, call 112 or 108.",
     "title": "Emergency Centre",
     "sosButton": "SOS",
     "tapToInitiate": "Tap to initiate emergency",
@@ -169,18 +192,42 @@
     "unifiedHealthcare": "Unified Healthcare",
     "unifiedHealthcareDesc": "One platform connecting Sub-Centres, PHCs, CHCs, and District Hospitals across your district",
     "aiTriage": "AI-Powered Triage",
-    "aiTriageDesc": "Smart symptom analysis with offline support. Works without internet on any phone",
+    "aiTriageDesc": "Capture supported records offline for later sync. AI triage requires a connection and is unavailable offline; sample results are not clinical assessments.",
     "emergencyResponse": "Emergency Response",
-    "emergencyResponseDesc": "One tap SOS. Ambulance dispatch. Real-time tracking. Every second counts",
+    "emergencyResponseDesc": "SOS opens an emergency form. Demo emergencies do not dispatch an ambulance or notify responders. For a real emergency, call 112 or 108.",
     "skip": "Skip",
     "next": "Next",
     "getStarted": "Get Started"
+  },
+  "more": {
+    "description": "More care tools. Home visits and inventory appear for the appropriate demo role."
+  },
+  "navigation": {
+    "patientDetail": "Patient Details",
+    "facilityDetail": "Facility Details",
+    "referralStatus": "Referral Status",
+    "referral": "Referral",
+    "newEmergency": "New Emergency",
+    "emergencyDetail": "Emergency Detail",
+    "bookAppointment": "Book Appointment"
   },
   "network": {
     "offline": "📴 You are offline — data will sync when connected",
     "online": "✅ Back online — syncing data..."
   },
   "diagnostics": {
+    "resultRequirements": "Enter an actual result (1-2000 characters after trimming), not Pending, NA, N/A or Not yet added. Unit: up to 50 characters; optional reference range: up to 200. Select a flag explicitly.",
+    "discardRejected": "Discard rejected action",
+    "discardExplanation": "The server rejected this action (400/422). Discard it to stop retries and allow a corrected entry. The original action remains in the audit history.",
+    "discardedAudit": "Discarded after server rejection. Audit retained; this action will not be replayed and no longer blocks a corrected entry.",
+    "discardFailed": "Could not discard the rejected action. It remains unchanged; try again. A corrected entry is still blocked.",
+    "ordersUnavailable": "Orders could not be refreshed. Any visible orders are the last loaded server snapshot.",
+    "catalogUnavailable": "The backend test catalogue is unavailable or empty. Creating orders is disabled until it loads.",
+    "unit": "Unit",
+    "clinicianReview": "Results and flags are entered by staff and require clinician review. This screen does not validate clinical rules.",
+    "criticalWarning": "Critical result entered. Contact the responsible clinician immediately; saving to the queue does not notify them.",
+    "priorityLabels": { "ROUTINE": "Routine", "URGENT": "Urgent", "STAT": "Immediate" },
+    "flags": { "NORMAL": "Normal", "ABNORMAL": "Abnormal", "CRITICAL": "Critical" },
     "title": "Diagnostics",
     "newOrder": "New Order",
     "create": "Create Order",
@@ -216,6 +263,16 @@
     "completed": "Completed"
   },
   "inventory": {
+    "roleRequired": "Only the PHARMACIST role can access inventory.",
+    "sourceNotice": "Enter the backend facility ID to load stock. Counts shown are server snapshots, not verified physical counts.",
+    "loadStock": "Load facility stock",
+    "unavailable": "Inventory could not be loaded. Check the facility ID and connection; changes are disabled until a successful reload.",
+    "serverStock": "Last server stock",
+    "recordedUsage": "Recorded dispensing in the last 7 days",
+    "perDay": "per day",
+    "usageNotice": "Based only on retained local dispensing logs, including pending and failed sync entries. Not a complete usage history or stockout forecast.",
+    "recordCount": "Record physical count",
+    "countNotice": "Enter the actual counted quantity. This queues a stock correction, not a verification or receipt confirmation.",
     "title": "Medicine Inventory",
     "searchPlaceholder": "Search medicines...",
     "noMedicines": "No medicines found",
@@ -238,6 +295,23 @@
     "stockVerified": "Stock verified successfully"
   },
   "asha": {
+    "roleRequired": "Only the ASHA role can access home visits.",
+    "scheduleNotice": "Filters use the recorded trimester and next visit date from the backend. Missing dates are shown as unknown; no clinical visit schedule is inferred.",
+    "unavailable": "Patients could not be loaded. Retry when connected.",
+    "noAncData": "No patients with a recorded trimester were returned. ANC details may be unavailable from this backend.",
+    "nextVisit": "Next scheduled visit",
+    "due": "Due or overdue",
+    "upcoming": "Upcoming",
+    "unknown": "Unknown / not recorded",
+    "yes": "Yes",
+    "no": "No",
+    "clinicianReview": "This checklist and its review prompts are not clinically validated rules or a diagnosis. A clinician must review observations; unflagged entries do not establish safety.",
+    "invalidChecklist": "Record at least one observation or note. Use BP as systolic/diastolic (120/80) and positive numbers for weight, Hb and fundal height.",
+    "hbReview": "Hb below 11 g/dL entered: clinician review needed.",
+    "bpReview": "BP at or above 140 systolic or 90 diastolic entered: clinician review needed.",
+    "presentationReview": "Presentation recorded: ask a clinician to review. Presentation alone does not establish preterm labour.",
+    "noAutoReferral": "No referral or clinician notification is sent automatically. Arrange review directly when needed. Saving does not change the server visit schedule.",
+    "fields": { "bp": "BP (mmHg)", "weight": "Weight (kg)", "hb": "Hb (g/dL)", "urineAlbumin": "Urine albumin", "hivSyphilis": "HIV / syphilis", "tt1": "TT1 given", "fundalHeight": "Fundal height (cm)", "tt2": "TT2 given", "ifa": "IFA given", "presentation": "Presentation", "ttBooster": "TT booster given" },
     "title": "ASHA Home Visit",
     "ancDueList": "ANC Due List",
     "trimester": "Trimester",
@@ -257,5 +331,23 @@
     "hypertensionFlag": "Hypertension (BP > 140/90)",
     "pretermFlag": "Preterm Signs",
     "saveVisit": "Save Visit"
+  },
+  "fieldSync": {
+    "title": "Saved local actions",
+    "explanation": "Saved actions are not server-confirmed until synced. Unsupported actions remain pending or in error; do not re-enter them to retry.",
+    "saveFailed": "Could not persist this action. Your form is still open; retry saving. No success was confirmed.",
+    "saveToQueue": "Save to sync queue",
+    "pending": "Pending server confirmation",
+    "syncing": "Syncing; not yet confirmed",
+    "synced": "Server confirmed",
+    "error": "Sync failed; saved locally",
+    "notConfirmed": "Not confirmed by server",
+    "CREATE_DIAGNOSTIC_ORDER": "Diagnostic order",
+    "ADD_DIAGNOSTIC_RESULT": "Diagnostic result",
+    "UPDATE_DIAGNOSTIC_STATUS": "Order status change",
+    "DISPENSE_MEDICINE": "Dispensing entry",
+    "CREATE_INVENTORY_ORDER": "Purchase order request",
+    "UPDATE_INVENTORY": "Stock count correction",
+    "CREATE_ASHA_VISIT": "Home visit"
   }
 }

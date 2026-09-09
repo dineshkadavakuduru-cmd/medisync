@@ -31,8 +31,8 @@ export function getCurrentLanguage(): Language {
 }
 
 export async function setLanguage(lang: Language) {
-  currentLanguage = lang;
   await AsyncStorage.setItem('app_language', lang);
+  currentLanguage = lang;
   listeners.forEach(fn => fn());
 }
 
@@ -42,9 +42,10 @@ export async function loadSavedLanguage() {
     if (saved && ['en', 'hi', 'mr'].includes(saved)) {
       currentLanguage = saved as Language;
     }
-  } catch (e) {
+  } catch {
     currentLanguage = 'en';
   }
+  listeners.forEach(fn => fn());
 }
 
 export function onLanguageChange(fn: () => void) {
@@ -56,9 +57,6 @@ export function onLanguageChange(fn: () => void) {
 }
 
 export function useTranslation() {
-  const [, forceUpdate] = React.useState(0);
-  React.useEffect(() => {
-    return onLanguageChange(() => forceUpdate(n => n + 1));
-  }, []);
-  return { t, language: currentLanguage, setLanguage };
+  const language = React.useSyncExternalStore(onLanguageChange, getCurrentLanguage, getCurrentLanguage);
+  return { t, language, setLanguage };
 }

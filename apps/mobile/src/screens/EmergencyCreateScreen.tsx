@@ -7,7 +7,6 @@ import {
   SafeAreaView,
   TouchableOpacity,
   TextInput,
-  Modal,
   Alert,
   Animated,
 } from 'react-native';
@@ -69,7 +68,7 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
   const [patientGender, setPatientGender] = useState('M');
   const [description, setDescription] = useState('');
   const [originFacilityId, setOriginFacilityId] = useState('facility-2');
-  const [initiatedBy, setInitiatedBy] = useState('user-current');
+  const [initiatedBy] = useState('user-current');
   const [createdEmergency, setCreatedEmergency] = useState<any>(null);
   const [checkedSteps, setCheckedSteps] = useState<Set<number>>(new Set());
   const [submitting, setSubmitting] = useState(false);

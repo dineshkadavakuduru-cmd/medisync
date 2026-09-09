@@ -3,14 +3,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 const DEMO_MODE_KEY = 'demo_mode_active';
 
 let demoActive = false;
+const listeners = new Set<() => void>();
+let initialization: Promise<void> | undefined;
+let writes: Promise<unknown> = Promise.resolve();
 
-export async function initDemoMode() {
-  try {
-    const val = await AsyncStorage.getItem(DEMO_MODE_KEY);
-    demoActive = val === 'true';
-  } catch (e) {
-    demoActive = false;
-  }
+export function initDemoMode(): Promise<void> {
+  initialization ??= AsyncStorage.getItem(DEMO_MODE_KEY).then(val => {
+    demoActive = val === null ? !process.env.EXPO_PUBLIC_API_URL : val === 'true';
+    listeners.forEach(listener => listener());
+  }).catch(error => { initialization = undefined; throw error; });
+  return initialization;
+}
+
+export function onDemoModeChange(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 }
 
 export function isDemoActive(): boolean {
@@ -18,13 +25,16 @@ export function isDemoActive(): boolean {
 }
 
 export async function toggleDemoMode(): Promise<boolean> {
-  demoActive = !demoActive;
-  try {
-    await AsyncStorage.setItem(DEMO_MODE_KEY, demoActive ? 'true' : 'false');
-  } catch (e) {
-    console.error(e);
-  }
-  return demoActive;
+  await initDemoMode();
+  const next = writes.then(async () => {
+    const value = !demoActive;
+    await AsyncStorage.setItem(DEMO_MODE_KEY, String(value));
+    demoActive = value;
+    listeners.forEach(listener => listener());
+    return value;
+  });
+  writes = next.catch(() => undefined);
+  return next;
 }
 
 export function getDemoHeader(): Record<string, string> {

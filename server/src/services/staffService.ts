@@ -22,10 +22,6 @@ const MARATHI_NAMES = [
   'Nitin Rathod', 'Archana Thorat', 'Santosh Kamble', 'Usha Mane', 'Rahul Gaikwad',
 ];
 
-function generateId(): string {
-  return `staff-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-}
-
 function generatePhone(): string {
   const digits = Math.floor(1000000000 + Math.random() * 9000000000);
   return `+91-${digits}`;
@@ -44,7 +40,6 @@ function pickMany(arr: string[], count: number): string[] {
 
 export function generateFacilityStaff(facilityId: string, facilityType: string): StaffMember[] {
   const type = facilityType.toUpperCase();
-  const now = new Date().toISOString();
   const staff: StaffMember[] = [];
   let idCounter = 1;
 

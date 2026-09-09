@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   RefreshControl,
   Animated,
   Modal,
+  Switch,
 } from 'react-native';
 import { COLORS, TriageSeverity, Alert } from '@medisync/shared';
 import { theme } from '../styles/theme';
@@ -22,16 +23,44 @@ import { useApi } from '../hooks/useApi';
 import { useTranslation } from '../i18n';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { useCountUp } from '../hooks/useCountUp';
-import { toggleDemoMode } from '../services/demoMode';
+import { isDemoActive, onDemoModeChange, toggleDemoMode } from '../services/demoMode';
 import {
-  Persona,
   UserRole,
   PERSONAS,
-  initActivePersona,
   getActivePersona,
   setActivePersona,
   onPersonaChange,
 } from '../services/personas';
+
+const PROFILE_COPY = {
+  en: {
+    switchRole: 'Switch demo persona',
+    roles: { DOCTOR: 'Doctor', ASHA: 'ASHA', PATIENT: 'Patient', ADMIN: 'Admin', PHARMACIST: 'Pharmacist' },
+    demo: 'Demo persona - synthetic data', patientDemo: 'Demo persona - PHR not connected',
+    data: 'Data source', facility: 'Demo facility', id: 'Demo staff / ABHA ID', status: 'Demo shift / status',
+    abha: 'Demo ABHA - not verified', close: 'Close profile', toggle: 'Toggle demo mode',
+    pharmacy: 'Pharmacy workspace', inventoryHint: 'Review stock, dispensing and orders in Inventory.',
+    availability: 'Medicine availability', stock: 'Stock details', openInventory: 'Open Inventory',
+  },
+  hi: {
+    switchRole: 'डेमो भूमिका चुनें',
+    roles: { DOCTOR: 'डॉक्टर', ASHA: 'आशा', PATIENT: 'मरीज़', ADMIN: 'प्रशासक', PHARMACIST: 'फार्मासिस्ट' },
+    demo: 'डेमो भूमिका - कृत्रिम डेटा', patientDemo: 'डेमो भूमिका - PHR जुड़ा नहीं है',
+    data: 'डेटा स्रोत', facility: 'डेमो सुविधा', id: 'डेमो कर्मचारी / ABHA ID', status: 'डेमो शिफ्ट / स्थिति',
+    abha: 'डेमो ABHA - सत्यापित नहीं', close: 'प्रोफ़ाइल बंद करें', toggle: 'डेमो मोड बदलें',
+    pharmacy: 'फार्मेसी कार्यक्षेत्र', inventoryHint: 'इन्वेंटरी में स्टॉक, दवा वितरण और ऑर्डर देखें।',
+    availability: 'दवा उपलब्धता', stock: 'स्टॉक विवरण', openInventory: 'इन्वेंटरी खोलें',
+  },
+  mr: {
+    switchRole: 'डेमो भूमिका निवडा',
+    roles: { DOCTOR: 'डॉक्टर', ASHA: 'आशा', PATIENT: 'रुग्ण', ADMIN: 'प्रशासक', PHARMACIST: 'फार्मासिस्ट' },
+    demo: 'डेमो भूमिका - कृत्रिम डेटा', patientDemo: 'डेमो भूमिका - PHR जोडलेले नाही',
+    data: 'डेटा स्रोत', facility: 'डेमो सुविधा', id: 'डेमो कर्मचारी / ABHA ID', status: 'डेमो पाळी / स्थिती',
+    abha: 'डेमो ABHA - पडताळलेले नाही', close: 'प्रोफाइल बंद करा', toggle: 'डेमो मोड बदला',
+    pharmacy: 'फार्मसी कार्यक्षेत्र', inventoryHint: 'इन्व्हेंटरीमध्ये साठा, औषध वितरण आणि मागण्या पहा.',
+    availability: 'औषध उपलब्धता', stock: 'साठ्याचा तपशील', openInventory: 'इन्व्हेंटरी उघडा',
+  },
+};
 
 const DEFAULT_STATS = {
   todaysReferrals: 14,
@@ -47,58 +76,53 @@ const DEFAULT_STATS = {
 };
 
 export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { t } = useTranslation();
-  const { data, loading, refetch } = useApi(() => api.getDashboardStats());
-  const { data: alertsData, refetch: refetchAlerts } = useApi(() => api.getAlerts());
-  const { data: referralsData } = useApi(() => api.getActiveReferrals());
+  const { t, language } = useTranslation();
+  const copy = PROFILE_COPY[language];
+  const { data, loading, error, refetch } = useApi(api.getDashboardStats);
+  const { data: alertsData, error: alertsError, refetch: refetchAlerts } = useApi(api.getAlerts);
+  const { data: referralsData, error: referralsError, refetch: refetchReferrals } = useApi(api.getActiveReferrals);
+  const demoActive = useSyncExternalStore(onDemoModeChange, isDemoActive, isDemoActive);
+  const [togglingDemo, setTogglingDemo] = useState(false);
+  const [demoError, setDemoError] = useState(false);
+  const demoToggleLock = useRef(false);
 
-  const [persona, setPersona] = useState<Persona>(getActivePersona());
+  const persona = useSyncExternalStore(onPersonaChange, getActivePersona, getActivePersona);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const sosScale = useRef(new Animated.Value(1)).current;
-
-  const tapCount = useRef(0);
-  const lastTap = useRef(0);
-
-  useEffect(() => {
-    initActivePersona().then((p) => setPersona(p));
-    const unsubscribe = onPersonaChange((newP) => setPersona(newP));
-    return () => unsubscribe();
-  }, []);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (persona.role === 'DOCTOR') {
-      if (hour >= 5 && hour < 12) return { text: 'Good Morning, Dr. Sharma', emoji: '🌅' };
-      if (hour >= 12 && hour < 17) return { text: 'Good Afternoon, Dr. Sharma', emoji: '☀️' };
-      if (hour >= 17 && hour < 21) return { text: 'Good Evening, Dr. Sharma', emoji: '🌆' };
-      return { text: 'On Night Duty, Dr. Sharma', emoji: '🌙' };
+      if (hour >= 5 && hour < 12) return { text: t('dashboard.goodMorning'), emoji: '🌅' };
+      if (hour >= 12 && hour < 17) return { text: t('dashboard.goodAfternoon'), emoji: '☀️' };
+      if (hour >= 17 && hour < 21) return { text: t('dashboard.goodEvening'), emoji: '🌆' };
+      return { text: t('dashboard.nightDuty'), emoji: '🌙' };
     }
-    return { text: persona.greetingTitle, emoji: '' };
+    return { text: `${t('dashboard.welcome')}, ${copy.roles[persona.role]}`, emoji: '' };
   };
 
   const greeting = getGreeting();
 
-  const dateString = new Date().toLocaleDateString('en-US', {
+  const dateString = new Date().toLocaleDateString({ en: 'en-IN', hi: 'hi-IN', mr: 'mr-IN' }[language], {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
   });
 
-  const handleTitlePress = () => {
-    const now = Date.now();
-    if (now - lastTap.current < 500) {
-      tapCount.current += 1;
-    } else {
-      tapCount.current = 1;
-    }
-    lastTap.current = now;
-
-    if (tapCount.current >= 5) {
-      tapCount.current = 0;
-      toggleDemoMode();
+  const handleDemoToggle = async () => {
+    if (demoToggleLock.current) return;
+    demoToggleLock.current = true;
+    setTogglingDemo(true);
+    setDemoError(false);
+    try {
+      await toggleDemoMode();
+    } catch {
+      setDemoError(true);
+    } finally {
+      demoToggleLock.current = false;
+      setTogglingDemo(false);
     }
   };
 
@@ -110,18 +134,10 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }).start();
   }, [fadeAnim]);
 
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(sosScale, { toValue: 1.1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(sosScale, { toValue: 1, duration: 1000, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [sosScale]);
-
   const stats = data || DEFAULT_STATS;
+  const statsSample = !data || data.source === 'sample';
+  const roleSample = persona.role !== 'DOCTOR' && persona.role !== 'PHARMACIST';
+  const sourceText = (sample: boolean, stale: boolean) => t(sample || demoActive ? 'dashboard.sampleSource' : stale ? 'dashboard.staleSource' : 'dashboard.serverSource');
 
   const alerts = ((alertsData?.data as Alert[] | undefined) || MOCK_ALERTS.data) as Alert[];
   const highRiskAlerts = alerts.filter(a => a.priority === 'CRITICAL' || a.priority === 'HIGH');
@@ -134,9 +150,8 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const animatedReferrals = useCountUp(stats.todaysReferrals, 1000);
   const animatedMedicine = useCountUp(stats.medicineAvailability, 1000);
 
-  const handleRoleSelect = async (role: UserRole) => {
-    const updated = await setActivePersona(role);
-    setPersona(updated);
+  const handleRoleSelect = (role: UserRole) => {
+    void setActivePersona(role);
   };
 
   return (
@@ -145,16 +160,14 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={() => { refetch(); refetchAlerts(); }} />
+          <RefreshControl refreshing={loading} onRefresh={() => { void refetch(); void refetchAlerts(); void refetchReferrals(); }} />
         }
       >
         <Animated.View style={{ opacity: fadeAnim }}>
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerLeft}>
-              <TouchableOpacity onPress={handleTitlePress} activeOpacity={0.8}>
-                <Text style={styles.headerTitle}>{greeting.text} {greeting.emoji}</Text>
-              </TouchableOpacity>
+              <Text style={styles.headerTitle}>{greeting.text} {greeting.emoji}</Text>
               <Text style={styles.headerDate}>{dateString}</Text>
             </View>
             <View style={styles.headerRight}>
@@ -162,6 +175,9 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
               <TouchableOpacity
                 style={[styles.avatar, { backgroundColor: persona.avatarColor }]}
                 onPress={() => setShowProfileModal(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('dashboard.openProfile')}
+                testID="home-profile"
                 activeOpacity={0.8}
               >
                 <Text style={styles.avatarText}>{persona.initials}</Text>
@@ -171,6 +187,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
           {/* Emergency Escalation Banner */}
           <View style={styles.emergencyBannerWrap}>
+            <Text style={styles.sourceNotice}>{sourceText(statsSample || persona.role === 'PATIENT', !!error)}</Text>
             <EmergencyBanner
               onPress={() => navigation.navigate('Emergency')}
               alertCount={persona.role === 'PATIENT' ? 1 : stats.pendingHighRiskAlerts}
@@ -178,29 +195,36 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
           </View>
 
           {/* Stat Cards */}
+          <Text style={styles.sourceNotice}>{sourceText(statsSample || roleSample, !!error)}</Text>
           <View style={styles.statCardsRow}>
             {persona.role === 'DOCTOR' && (
               <>
-                <StatCard title={t('dashboard.todayReferrals')} value={animatedReferrals} trend={{ value: stats.referralTrend, direction: 'up' }} />
-                <StatCard title={t('dashboard.medicineAvail')} value={`${animatedMedicine}%`} progressBar={{ value: animatedMedicine, max: 100 }} />
+                <StatCard title={t('dashboard.todayReferrals')} value={statsSample ? stats.todaysReferrals : animatedReferrals} trend={{ value: stats.referralTrend, direction: 'up' }} />
+                <StatCard title={t('dashboard.medicineAvail')} value={`${statsSample ? stats.medicineAvailability : animatedMedicine}%`} progressBar={{ value: statsSample ? stats.medicineAvailability : animatedMedicine, max: 100 }} />
               </>
             )}
             {persona.role === 'ASHA' && (
               <>
-                <StatCard title="Field Screenings" value="18" trend={{ value: 5, direction: 'up' }} />
-                <StatCard title="ANC Care Monitored" value="94%" progressBar={{ value: 94, max: 100 }} />
+                <StatCard title={t('dashboard.fieldScreenings')} value="18" trend={{ value: 5, direction: 'up' }} />
+                <StatCard title={t('dashboard.ancMonitored')} value="94%" progressBar={{ value: 94, max: 100 }} />
               </>
             )}
             {persona.role === 'PATIENT' && (
               <>
-                <StatCard title="Active Medicines" value="2 Rx" />
-                <StatCard title="Health Index" value="88%" progressBar={{ value: 88, max: 100 }} />
+                <StatCard title={t('dashboard.activeMedicines')} value="2 Rx" />
+                <StatCard title={t('dashboard.healthIndex')} value="88%" progressBar={{ value: 88, max: 100 }} />
               </>
             )}
             {persona.role === 'ADMIN' && (
               <>
-                <StatCard title="PHCs Monitored" value="10/10" />
-                <StatCard title="Bed Occupancy" value="74%" progressBar={{ value: 74, max: 100 }} />
+                <StatCard title={t('dashboard.phcsMonitored')} value="10/10" />
+                <StatCard title={t('dashboard.bedOccupancy')} value="74%" progressBar={{ value: 74, max: 100 }} />
+              </>
+            )}
+            {persona.role === 'PHARMACIST' && (
+              <>
+                <StatCard title={copy.availability} value={`${statsSample ? stats.medicineAvailability : animatedMedicine}%`} progressBar={{ value: statsSample ? stats.medicineAvailability : animatedMedicine, max: 100 }} />
+                <StatCard title={copy.stock} value={t('common.inventory')} />
               </>
             )}
           </View>
@@ -209,18 +233,27 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
           {/* Queue Management */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('dashboard.queueManagement')}</Text>
+            <Text style={styles.sectionTitle}>{persona.role === 'PHARMACIST' ? copy.pharmacy : t('dashboard.queueManagement')}</Text>
+            <Text style={styles.sourceNotice}>{sourceText(statsSample || roleSample, !!error)}</Text>
+            {persona.role === 'PHARMACIST' && (
+              <>
+                <Text style={styles.inventoryHint}>{copy.inventoryHint}</Text>
+                <TouchableOpacity style={styles.demoModeBtn} accessibilityRole="button" onPress={() => navigation.navigate('Inventory')}>
+                  <Text style={styles.demoModeBtnText}>{copy.openInventory}</Text>
+                </TouchableOpacity>
+              </>
+            )}
             {persona.role === 'DOCTOR' && (
               <QueueCard count={stats.patientsWaiting} label={t('dashboard.patientsWaiting')} />
             )}
             {persona.role === 'ASHA' && (
-              <QueueCard count={3} label="Mothers Due for Home Visit" />
+              <QueueCard count={3} label={t('dashboard.mothersDue')} />
             )}
             {persona.role === 'PATIENT' && (
-              <QueueCard count={4} label="Token #04 • Approx 15 min wait at OPD" />
+              <QueueCard count={4} label={t('dashboard.sampleToken')} />
             )}
             {persona.role === 'ADMIN' && (
-              <QueueCard count={74} label="Patients Waiting Across District PHCs" />
+              <QueueCard count={74} label={t('dashboard.districtWaiting')} />
             )}
           </View>
 
@@ -234,13 +267,15 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <Text style={styles.alertBadgeText}>{sortedReferrals.length} {t('dashboard.activeReferrals')}</Text>
               </View>
             </View>
+            <Text style={styles.sourceNotice}>{sourceText(!referralsData?.data || referralsData.source === 'sample', !!referralsError)}</Text>
+            <Text style={styles.viewOnly}>{t('dashboard.viewOnly')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.horizontalScroll}>
               {sortedReferrals.length === 0 ? (
                 <Text style={styles.noAlerts}>{t('common.noData')}</Text>
               ) : (
                 sortedReferrals.map((referral) => (
-                  <View key={referral.id} style={referral.severity === TriageSeverity.RED ? styles.redCardWrapper : styles.cardWrapper}>
-                    <ReferralCard referral={referral} onPress={() => {}} />
+                  <View key={referral.id} pointerEvents="none" style={referral.severity === TriageSeverity.RED ? styles.redCardWrapper : styles.cardWrapper}>
+                    <ReferralCard referral={referral} />
                   </View>
                 ))
               )}
@@ -257,9 +292,11 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <Text style={styles.alertBadgeText}>{highRiskAlerts.length} {t('dashboard.pending')}</Text>
               </View>
             </View>
-            <View style={styles.alertsList}>
+            <Text style={styles.sourceNotice}>{sourceText(!alertsData?.data || alertsData.source === 'sample', !!alertsError)}</Text>
+            <Text style={styles.viewOnly}>{t('dashboard.viewOnly')}</Text>
+            <View style={styles.alertsList} pointerEvents="none">
               {highRiskAlerts.slice(0, 3).map((alert) => (
-                <AlertCard key={alert.id} alert={alert} onPress={() => {}} />
+                <AlertCard key={alert.id} alert={alert} />
               ))}
               {highRiskAlerts.length === 0 && (
                 <Text style={styles.noAlerts}>{t('common.noData')}</Text>
@@ -277,27 +314,16 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
         </Animated.View>
       </ScrollView>
 
-      {/* Floating SOS button */}
-      <TouchableOpacity
-        style={styles.sosFab}
-        onPress={() => navigation.navigate('EmergencyCreate')}
-        activeOpacity={0.9}
-      >
-        <Animated.View style={[styles.sosFabInner, { transform: [{ scale: sosScale }] }]}>
-          <Text style={styles.sosFabText}>SOS</Text>
-        </Animated.View>
-      </TouchableOpacity>
-
       {/* Profile Modal */}
-      <Modal visible={showProfileModal} animationType="slide" transparent={true}>
+      <Modal visible={showProfileModal} animationType="slide" transparent={true} onRequestClose={() => setShowProfileModal(false)}>
         <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+          <ScrollView style={styles.modalCard} contentContainerStyle={styles.modalContent}>
             {/* Modal Header */}
             <View style={styles.modalHeader}>
               <View style={[styles.profileAvatar, { backgroundColor: persona.avatarColor }]}>
                 <Text style={styles.profileAvatarText}>{persona.initials}</Text>
               </View>
-              <TouchableOpacity style={styles.modalCloseBtn} onPress={() => setShowProfileModal(false)}>
+              <TouchableOpacity style={styles.modalCloseBtn} accessibilityRole="button" accessibilityLabel={copy.close} onPress={() => setShowProfileModal(false)}>
                 <Text style={styles.modalCloseText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -307,14 +333,16 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
             {/* Persona Switcher Buttons in Modal */}
             <View style={styles.roleSwitcherContainer}>
-              <Text style={styles.roleSwitcherTitle}>Switch Persona / Role:</Text>
+              <Text style={styles.roleSwitcherTitle}>{copy.switchRole}</Text>
               <View style={styles.roleSwitcherGrid}>
-                {(['DOCTOR', 'ASHA', 'PATIENT', 'ADMIN'] as UserRole[]).map((r) => {
+                {(Object.keys(PERSONAS) as UserRole[]).map((r) => {
                   const isSelected = persona.role === r;
                   const item = PERSONAS[r];
                   return (
                     <TouchableOpacity
                       key={r}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
                       onPress={() => handleRoleSelect(r)}
                       style={[
                         styles.roleButton,
@@ -323,10 +351,7 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                       activeOpacity={0.75}
                     >
                       <Text style={[styles.roleButtonText, isSelected && { color: item.accent, fontWeight: '700' }]}>
-                        {r === 'DOCTOR' && '👨‍⚕️ Doctor'}
-                        {r === 'ASHA' && '👩‍⚕️ ASHA'}
-                        {r === 'PATIENT' && '👨‍🌾 Patient'}
-                        {r === 'ADMIN' && '🏛️ Admin'}
+                        {copy.roles[r]}
                       </Text>
                     </TouchableOpacity>
                   );
@@ -337,46 +362,41 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
             {/* Meta Details Box */}
             <View style={styles.profileMetaBox}>
               <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>🏥 Facility</Text>
+                <Text style={styles.profileLabel}>{copy.facility}</Text>
                 <Text style={styles.profileValue}>{persona.facility}</Text>
               </View>
               <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>🆔 Staff / ABHA ID</Text>
+                <Text style={styles.profileLabel}>{copy.id}</Text>
                 <Text style={styles.profileValue}>{persona.staffId}</Text>
               </View>
               <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>⏰ Shift / Status</Text>
-                <Text style={styles.profileValue}>{persona.shiftOrAbha}</Text>
+                <Text style={styles.profileLabel}>{copy.status}</Text>
+                <Text style={styles.profileValue}>{persona.role === 'PATIENT' ? copy.abha : persona.shiftOrAbha}</Text>
               </View>
               <View style={styles.profileRow}>
-                <Text style={styles.profileLabel}>📶 Offline Sync</Text>
-                <Text style={[styles.profileValue, { color: COLORS.success, fontWeight: '700' }]}>
-                  {persona.syncStatus}
+                <Text style={styles.profileLabel}>{copy.data}</Text>
+                <Text style={styles.profileValue}>
+                  {language === 'en' ? persona.dataLabel : persona.role === 'PATIENT' ? copy.patientDemo : copy.demo}
                 </Text>
               </View>
             </View>
 
             {/* Action Buttons */}
             <View style={styles.profileActions}>
-              <TouchableOpacity
-                style={styles.demoModeBtn}
-                onPress={() => {
-                  toggleDemoMode();
-                  setShowProfileModal(false);
-                }}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.demoModeBtnText}>🎮 Toggle Demo Mode</Text>
-              </TouchableOpacity>
+              <View style={[styles.demoModeBtn, styles.demoModeRow]}>
+                <Text style={styles.demoModeBtnText}>{t('dashboard.demoMode')}</Text>
+                <Switch testID="demo-mode-switch" accessibilityLabel={t('dashboard.demoMode')} value={demoActive} disabled={togglingDemo} onValueChange={() => void handleDemoToggle()} />
+              </View>
+              {demoError && <Text accessibilityRole="alert" style={styles.viewOnly}>{t('common.error')}</Text>}
               <TouchableOpacity
                 style={styles.logoutBtn}
                 onPress={() => setShowProfileModal(false)}
                 activeOpacity={0.8}
               >
-                <Text style={styles.logoutText}>Close Profile</Text>
+                <Text style={styles.logoutText}>{copy.close}</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </Modal>
     </SafeAreaView>
@@ -385,7 +405,10 @@ export const HomeScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  scrollContent: { paddingHorizontal: theme.layout.screenPadding, paddingTop: 8, paddingBottom: 120 },
+  scrollContent: { paddingHorizontal: theme.layout.screenPadding, paddingTop: 8, paddingBottom: 24 },
+  sourceNotice: { color: COLORS.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 8 },
+  viewOnly: { color: COLORS.textSecondary, fontSize: 12, lineHeight: 18 },
+  demoModeRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: theme.spacing.md, paddingBottom: theme.spacing.sm },
   headerLeft: { flex: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm },
@@ -408,40 +431,9 @@ const styles = StyleSheet.create({
   cardWrapper: { marginRight: theme.spacing.md, width: 280 },
   redCardWrapper: { marginRight: theme.spacing.md, width: 280, borderLeftWidth: 4, borderLeftColor: COLORS.severityRed },
   divider: { height: 1, backgroundColor: COLORS.border },
-  sosFab: {
-    position: 'absolute',
-    bottom: 80,
-    right: 16,
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: 'rgba(198,40,40,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 99,
-    elevation: 8,
-  },
-  sosFabInner: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: COLORS.emergency,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: COLORS.emergency,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  sosFabText: {
-    color: COLORS.textOnPrimary,
-    fontSize: 15,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 40 },
+  modalCard: { backgroundColor: '#FFFFFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, maxHeight: '90%' },
+  modalContent: { padding: 24, paddingBottom: 40 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   profileAvatar: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
   profileAvatarText: { color: '#FFF', fontSize: 24, fontWeight: '800' },
@@ -451,9 +443,12 @@ const styles = StyleSheet.create({
   profileRole: { fontSize: 14, color: COLORS.textSecondary, marginBottom: 16 },
   roleSwitcherContainer: { marginBottom: 18 },
   roleSwitcherTitle: { fontSize: 12, fontWeight: '700', color: '#757575', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 },
-  roleSwitcherGrid: { flexDirection: 'row', gap: 8 },
+  roleSwitcherGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   roleButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: '30%',
+    paddingHorizontal: 8,
+    minHeight: 44,
     paddingVertical: 10,
     borderRadius: 10,
     borderWidth: 1.5,
@@ -464,9 +459,10 @@ const styles = StyleSheet.create({
   },
   roleButtonText: { fontSize: 12, fontWeight: '600', color: '#616161' },
   profileMetaBox: { backgroundColor: '#F8F9FA', borderRadius: 16, padding: 16, gap: 12, marginBottom: 20 },
-  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  profileLabel: { fontSize: 14, color: COLORS.textSecondary },
-  profileValue: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  profileLabel: { flex: 1, fontSize: 14, color: COLORS.textSecondary },
+  profileValue: { flex: 1, textAlign: 'right', fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  inventoryHint: { fontSize: 14, color: COLORS.textSecondary },
   profileActions: { gap: 10 },
   demoModeBtn: { backgroundColor: '#E0F2F1', paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
   demoModeBtnText: { color: '#00695C', fontWeight: '700', fontSize: 15 },

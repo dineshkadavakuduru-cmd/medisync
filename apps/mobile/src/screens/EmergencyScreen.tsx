@@ -6,15 +6,12 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  TextInput,
   Modal,
   Animated,
-  Dimensions,
   Linking,
 } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { EmergencyBanner } from '../components/EmergencyBanner';
 import { EmergencyCard } from '../components/EmergencyCard';
 import { api } from '../services/api';
 import { useTranslation } from '../i18n';
@@ -123,7 +120,7 @@ export const EmergencyScreen: React.FC = () => {
     }
   };
 
-  const handleEmergencyPress = (emergency: Emergency) => {
+  const handleEmergencyPress = () => {
     // Navigate to detail screen
   };
 
@@ -197,7 +194,7 @@ export const EmergencyScreen: React.FC = () => {
           ) : (
             <View style={styles.emergencyList}>
               {emergencies.map((emergency) => (
-                <EmergencyCard key={emergency.id} emergency={emergency} onPress={() => handleEmergencyPress(emergency)} />
+                <EmergencyCard key={emergency.id} emergency={emergency} onPress={() => handleEmergencyPress()} />
               ))}
             </View>
           )}
@@ -263,8 +260,6 @@ export const EmergencyScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
-
-const { width } = Dimensions.get('window');
 
 const styles = StyleSheet.create({
   container: {

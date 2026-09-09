@@ -443,6 +443,34 @@ export interface TeleconsultSession {
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
+  prescription?: Prescription;
+}
+
+export interface DoctorAvailability {
+  doctorId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isException: boolean;
+  exceptionDate?: string;
+}
+
+export interface Prescription {
+  id: string;
+  sessionId: string;
+  patientId: string;
+  doctorId: string;
+  medications: PrescriptionMedication[];
+  notes?: string;
+  createdAt: string;
+}
+
+export interface PrescriptionMedication {
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  instructions?: string;
 }
 
 export type AppointmentStatus = 'BOOKED' | 'CHECKED_IN' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' | 'NO_SHOW';
@@ -476,7 +504,7 @@ export interface QueueEntry {
   estimatedWaitMinutes: number;
 }
 
-export type DiagnosticStatus = 'ORDERED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+export type DiagnosticStatus = 'ORDERED' | 'SAMPLE_COLLECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
 export type TestFlag = 'NORMAL' | 'ABNORMAL' | 'CRITICAL';
 export type DiagnosticPriority = 'ROUTINE' | 'URGENT' | 'STAT';
 

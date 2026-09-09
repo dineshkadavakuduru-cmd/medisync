@@ -1,15 +1,16 @@
-import { Schema } from '@nozbe/watermelondb';
+import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
-import Patient from './Patient';
-import HealthRecord from './HealthRecord';
-import Referral from './Referral';
-import Facility from './Facility';
-import Alert from './Alert';
+import Patient from './models/Patient';
+import HealthRecord from './models/HealthRecord';
+import Referral from './models/Referral';
+import Facility from './models/Facility';
+import Alert from './models/Alert';
 
-export const schema = Schema({
+// Prepared schema only: the app's AsyncStorage queue is not a database sync engine.
+export const schema = appSchema({
   version: 1,
   tables: [
-    {
+    tableSchema({
       name: 'patients',
       columns: [
         { name: 'abha_id', type: 'string', isIndexed: true, isOptional: false },
@@ -24,8 +25,8 @@ export const schema = Schema({
         { name: 'created_at', type: 'number', isOptional: false },
         { name: 'updated_at', type: 'number', isOptional: false },
       ],
-    },
-    {
+    }),
+    tableSchema({
       name: 'health_records',
       columns: [
         { name: 'patient_id', type: 'string', isIndexed: true, isOptional: false },
@@ -39,8 +40,8 @@ export const schema = Schema({
         { name: 'created_at', type: 'number', isOptional: false },
         { name: 'updated_at', type: 'number', isOptional: false },
       ],
-    },
-    {
+    }),
+    tableSchema({
       name: 'referrals',
       columns: [
         { name: 'patient_id', type: 'string', isIndexed: true, isOptional: false },
@@ -55,8 +56,8 @@ export const schema = Schema({
         { name: 'created_at', type: 'number', isOptional: false },
         { name: 'updated_at', type: 'number', isOptional: false },
       ],
-    },
-    {
+    }),
+    tableSchema({
       name: 'facilities',
       columns: [
         { name: 'name', type: 'string', isOptional: false },
@@ -75,8 +76,8 @@ export const schema = Schema({
         { name: 'created_at', type: 'number', isOptional: false },
         { name: 'updated_at', type: 'number', isOptional: false },
       ],
-    },
-    {
+    }),
+    tableSchema({
       name: 'alerts',
       columns: [
         { name: 'type', type: 'string', isOptional: false },
@@ -90,7 +91,7 @@ export const schema = Schema({
         { name: 'created_at', type: 'number', isOptional: false },
         { name: 'updated_at', type: 'number', isOptional: false },
       ],
-    },
+    }),
   ],
 });
 

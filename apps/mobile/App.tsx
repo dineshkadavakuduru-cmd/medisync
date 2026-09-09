@@ -1,9 +1,12 @@
-import React from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, Platform, ActivityIndicator } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { NetworkBanner } from './src/components/NetworkBanner';
+import { loadSavedLanguage } from './src/i18n';
+import { initDemoMode } from './src/services/demoMode';
 
 const theme = {
   colors: {
@@ -17,21 +20,35 @@ const theme = {
 };
 
 export default function App() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    void Promise.all([loadSavedLanguage(), initDemoMode()]).then(() => {
+      if (mounted) setReady(true);
+    });
+    return () => { mounted = false; };
+  }, []);
+
   return (
-    <PaperProvider theme={theme}>
+    <SafeAreaProvider>
+      <PaperProvider theme={theme}>
       <ErrorBoundary>
         <View style={styles.webContainer}>
           <View style={styles.appShell}>
-            <AppNavigator />
-            <NetworkBanner />
+            {ready ? <>
+              <AppNavigator />
+              <NetworkBanner />
+            </> : <ActivityIndicator style={styles.loading} size="large" color={theme.colors.primary} />}
           </View>
         </View>
       </ErrorBoundary>
-    </PaperProvider>
+      </PaperProvider>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  loading: { flex: 1 },
   webContainer: {
     flex: 1,
     backgroundColor: '#EAEAEA',

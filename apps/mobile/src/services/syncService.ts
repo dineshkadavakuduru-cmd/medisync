@@ -1,254 +1,255 @@
-import { SyncAction, SyncActionType } from './syncService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+import { isDemoActive, onDemoModeChange } from './demoMode';
 
-const STORAGE_KEY = 'medisync_offline_actions';
-const MAX_RETRY = 3;
-const SYNC_INTERVAL = 5000;
-
-let isOnline = true;
-let syncInProgress = false;
-let listeners: Array<() => void> = [];
-
-function getStoredActions(): SyncAction[] {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
+export type SyncActionType = 'CREATE_DIAGNOSTIC_ORDER' | 'ADD_DIAGNOSTIC_RESULT' | 'UPDATE_DIAGNOSTIC_STATUS'
+  | 'CREATE_REFERRAL' | 'CREATE_ASHA_VISIT' | 'UPDATE_INVENTORY' | 'DISPENSE_MEDICINE' | 'CREATE_INVENTORY_ORDER' | 'UPDATE_INVENTORY_ORDER' | 'CREATE_PATIENT';
+export interface SyncAction {
+  id: string;
+  type: SyncActionType;
+  payload: Record<string, unknown>;
+  timestamp: number;
+  retryCount: number;
+  status: 'pending' | 'syncing' | 'synced' | 'error';
+  error?: string;
+  response?: unknown;
+  demo?: boolean;
+  discarded?: boolean;
+  rejectionStatus?: number;
 }
+type Store = Pick<typeof AsyncStorage, 'getItem' | 'setItem'>;
+const key = 'medisync_offline_actions';
+const verifiedKey = 'medisync_outbox_verified_v2';
+const types: SyncActionType[] = ['CREATE_DIAGNOSTIC_ORDER', 'ADD_DIAGNOSTIC_RESULT', 'UPDATE_DIAGNOSTIC_STATUS',
+  'CREATE_REFERRAL', 'CREATE_ASHA_VISIT', 'UPDATE_INVENTORY', 'DISPENSE_MEDICINE', 'CREATE_INVENTORY_ORDER', 'UPDATE_INVENTORY_ORDER', 'CREATE_PATIENT'];
 
-function saveActions(actions: SyncAction[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(actions));
-  } catch (e) {
-    console.error('Failed to save offline actions:', e);
-  }
-}
-
-function notifyListeners() {
-  listeners.forEach(fn => fn());
-}
-
-export const syncService = {
-  init() {
-    // Listen for online/offline events
-    if (typeof window !== 'undefined') {
-      window.addEventListener('online', () => {
-        isOnline = true;
-        notifyListeners();
-        this.syncAll();
-      });
-      window.addEventListener('offline', () => {
-        isOnline = false;
-        notifyListeners();
-      });
-      // Start periodic sync
-      setInterval(() => {
-        if (isOnline && !syncInProgress) this.syncAll();
-      }, SYNC_INTERVAL);
+// A persisted local outbox, not WatermelonDB synchronization. Never replay legacy
+// "synced" actions automatically: previous versions did not contact a server.
+export function createSyncService(store: Store, origin: string, send: typeof fetch = fetch, demoMode: () => boolean = () => false) {
+  let actions: SyncAction[] = [];
+  let initialized: Promise<void> | undefined;
+  let serial: Promise<unknown> = Promise.resolve();
+  let syncing = false;
+  let online = true;
+  let error = '';
+  let networkStarted = false;
+  const listeners = new Set<() => void>();
+  const notify = () => listeners.forEach(listener => listener());
+  const exclusive = <T,>(fn: () => Promise<T>): Promise<T> => {
+    const next = serial.then(fn);
+    serial = next.catch(() => undefined);
+    return next;
+  };
+  const persist = async (next: SyncAction[]) => {
+    try {
+      await store.setItem(key, JSON.stringify(next));
+      actions = next;
+      notify();
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Local storage failed';
+      notify();
+      throw e;
     }
-  },
-
-  isOnline(): boolean {
-    return isOnline;
-  },
-
-  getPendingCount(): number {
-    return getStoredActions().filter(a => a.status === 'pending' || a.status === 'error').length;
-  },
-
-  getActions(): SyncAction[] {
-    return getStoredActions();
-  },
-
-  subscribe(fn: () => void): () => void {
-    listeners.push(fn);
-    return () => {
-      const idx = listeners.indexOf(fn);
-      if (idx >= 0) listeners.splice(idx, 1);
-    };
-  },
-
-  async enqueue(action: Omit<SyncAction, 'id' | 'retryCount' | 'status'>): Promise<void> {
-    const actions = getStoredActions();
-    const newAction: SyncAction = {
-      ...action,
-      id: `action-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      retryCount: 0,
-      status: 'pending',
-    };
-    actions.push(newAction);
-    saveActions(actions);
-    notifyListeners();
-
-    // Try immediate sync if online
-    if (isOnline) {
-      setTimeout(() => this.syncAll(), 100);
-    }
-  },
-
-  async syncAll(): Promise<void> {
-    if (syncInProgress || !isOnline) return;
-
-    const actions = getStoredActions().filter(
-      a => a.status === 'pending' || (a.status === 'error' && a.retryCount < MAX_RETRY)
-    );
-
-    if (actions.length === 0) return;
-
-    syncInProgress = true;
-    notifyListeners();
-
-    // Mark as syncing
-    const allActions = getStoredActions();
-    const syncingActions = allActions.map(a =>
-      actions.some(sa => sa.id === a.id) ? { ...a, status: 'syncing' as const } : a
-    );
-    saveActions(syncingActions);
-    notifyListeners();
-
-    for (const action of actions) {
-      try {
-        await this.processAction(action);
-        // Mark synced
-        const updated = getStoredActions().map(a =>
-          a.id === action.id ? { ...a, status: 'synced' as const } : a
-        );
-        saveActions(updated);
-      } catch (error: any) {
-        // Mark error, increment retry
-        const updated = getStoredActions().map(a =>
-          a.id === action.id
-            ? { ...a, status: 'error' as const, retryCount: a.retryCount + 1, error: error.message }
-            : a
-        );
-        saveActions(updated);
+  };
+  const load = () => {
+    if (!initialized) initialized = exclusive(async () => {
+      const raw = await store.getItem(key);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed) || parsed.some(a => !a || typeof a.id !== 'string' ||
+        !types.includes(a.type) || !a.payload || typeof a.payload !== 'object' ||
+        !['pending', 'syncing', 'synced', 'error'].includes(a.status))) {
+        throw new Error('Invalid saved outbox. Data was retained; contact support.');
       }
+      const verified = await store.getItem(verifiedKey);
+      const recovered = (parsed as SyncAction[]).map(a => {
+        if (!verified) return { ...a, demo: true, status: 'error' as const,
+          error: 'Legacy action: server delivery unverified. Review manually before recreating.' };
+        return a.status === 'syncing' ? { ...a, status: 'pending' as const } : a;
+      });
+      await persist(recovered);
+      await store.setItem(verifiedKey, 'true');
+    }).catch(e => {
+      initialized = undefined;
+      error = e instanceof Error ? e.message : 'Cannot load local outbox';
+      notify();
+      throw e;
+    });
+    return initialized;
+  };
+  const processAction = async (action: SyncAction) => {
+    if (action.demo) throw new Error('Demo/legacy action is local only and cannot be sent.');
+    if (demoMode()) throw new Error('Demo mode is active. Server actions remain paused.');
+    if (!origin.trim()) throw new Error('Backend not configured. Action remains saved on this device.');
+    const url = new URL(origin.trim());
+    if (!['https:', 'http:'].includes(url.protocol) || !['/', '/api', '/api/'].includes(url.pathname) || url.search || url.hash || url.username || url.password) {
+      throw new Error('Invalid backend origin');
     }
-
-    // Clean up old synced actions (keep last 50)
-    const remaining = getStoredActions()
-      .filter(a => a.status !== 'synced')
-      .concat(
-        getStoredActions()
-          .filter(a => a.status === 'synced')
-          .slice(-50)
-      );
-    saveActions(remaining);
-    syncInProgress = false;
-    notifyListeners();
-  },
-
-  async processAction(action: SyncAction): Promise<void> {
-    // Simulate API call - in real app, call actual endpoints
-    const { type, payload } = action;
-
-    // For demo, simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 500));
-
-    switch (type) {
-      case 'CREATE_DIAGNOSTIC_ORDER':
-      case 'CREATE_REFERRAL':
-      case 'CREATE_ASHA_VISIT':
-      case 'UPDATE_INVENTORY':
-      case 'DISPENSE_MEDICINE':
-      case 'CREATE_INVENTORY_ORDER':
-      case 'ADD_DIAGNOSTIC_RESULT':
-      case 'UPDATE_DIAGNOSTIC_STATUS':
-        // In real implementation, call actual API
-        // For now, just succeed
-        console.log(`Synced ${type}:`, payload);
-        break;
-      default:
-        console.warn('Unknown action type:', type);
+    let endpoint: string;
+    let method = 'POST';
+    let payload = action.payload;
+    // Only replay operations with server-side durable idempotency. Other workflows
+    // remain visible, saved locally, until their backend contract is implemented.
+    if (action.type === 'CREATE_DIAGNOSTIC_ORDER') endpoint = '/diagnostics/orders';
+    else if (action.type === 'CREATE_REFERRAL') endpoint = '/referrals';
+    else if (action.type === 'CREATE_PATIENT') endpoint = '/patients';
+    else if (['CREATE_ASHA_VISIT', 'UPDATE_INVENTORY', 'DISPENSE_MEDICINE', 'CREATE_INVENTORY_ORDER', 'UPDATE_INVENTORY_ORDER'].includes(action.type)) {
+      endpoint = '/field-workflows/actions';
+      payload = { id: action.id, type: action.type, payload: action.payload };
     }
-  },
-
-  seedDemoActions() {
-    const actions = getStoredActions();
-    if (actions.length > 0) return; // Only seed once
-
-    const demoActions: SyncAction[] = [
-      {
-        id: 'demo-1',
-        type: 'CREATE_REFERRAL',
-        payload: {
-          patientId: 'patient-3',
-          fromFacilityId: 'f1',
-          toFacilityId: 'f2',
-          severity: 'YELLOW',
-          reason: 'High fever, needs specialist',
-        },
-        timestamp: Date.now() - 3600000,
-        retryCount: 0,
-        status: 'pending',
-      },
-      {
-        id: 'demo-2',
-        type: 'CREATE_DIAGNOSTIC_ORDER',
-        payload: {
-          patientId: 'patient-5',
-          facilityId: 'f2',
-          tests: ['blood_sugar', 'cbc'],
-          priority: 'ROUTINE',
-          orderedBy: 'ASHA-Worker-3',
-        },
-        timestamp: Date.now() - 1800000,
-        retryCount: 0,
-        status: 'pending',
-      },
-      {
-        id: 'demo-3',
-        type: 'CREATE_ASHA_VISIT',
-        payload: {
-          patientId: 'patient-8',
-          ashaId: 'ASHA-Worker-1',
-          trimester: 2,
-          checklist: { bp: '120/80', weight: '62', hb: '11.5', fundalHeight: '22' },
-        },
-        timestamp: Date.now() - 600000,
-        retryCount: 0,
-        status: 'pending',
-      },
-      {
-        id: 'demo-4',
-        type: 'DISPENSE_MEDICINE',
-        payload: {
-          medicineId: 'paracetamol',
-          facilityId: 'f1',
-          quantity: 10,
-          patientId: 'patient-2',
-        },
-        timestamp: Date.now() - 300000,
-        retryCount: 0,
-        status: 'pending',
-      },
-      {
-        id: 'demo-5',
-        type: 'UPDATE_INVENTORY',
-        payload: {
-          medicineId: 'ors',
-          facilityId: 'f5',
-          newStock: 15,
-        },
-        timestamp: Date.now() - 60000,
-        retryCount: 0,
-        status: 'pending',
-      },
-    ];
-
-    saveActions(demoActions);
-    notifyListeners();
-  },
-
-  // For demo mode - clear all
-  clearAll() {
-    saveActions([]);
-    notifyListeners();
-  },
-};
-
-// Auto-initialize
-if (typeof window !== 'undefined') {
-  syncService.init();
+    else if (action.type === 'ADD_DIAGNOSTIC_RESULT' || action.type === 'UPDATE_DIAGNOSTIC_STATUS') {
+      const { orderId, ...body } = action.payload;
+      if (typeof orderId !== 'string' || !orderId) throw new Error('Order ID required');
+      endpoint = `/diagnostics/orders/${encodeURIComponent(orderId)}/${action.type === 'ADD_DIAGNOSTIC_RESULT' ? 'result' : 'status'}`;
+      method = 'PATCH';
+      payload = body;
+    }
+    else throw new Error('This operation is saved locally; replay-safe backend support is not configured.');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const result = await send(`${url.origin}/api${endpoint}`, {
+        method, signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': action.id },
+        body: JSON.stringify(payload),
+      });
+      const body = await result.json();
+      const data = body?.data;
+      const nonempty = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+      const submitted = action.payload;
+      const matchesText = (value: unknown, expected: unknown) => nonempty(value) && nonempty(expected) && value === expected.trim();
+      let acknowledged = !!data && typeof data === 'object' && !Array.isArray(data) && nonempty(data.id);
+      if (acknowledged) {
+        switch (action.type) {
+          case 'CREATE_ASHA_VISIT':
+          case 'UPDATE_INVENTORY':
+          case 'DISPENSE_MEDICINE':
+          case 'CREATE_INVENTORY_ORDER':
+          case 'UPDATE_INVENTORY_ORDER':
+            acknowledged = data.id === action.id && data.type === action.type && nonempty(data.entityId) &&
+              data.entityId === (action.type === 'UPDATE_INVENTORY_ORDER' ? submitted.orderId : action.id) &&
+              (action.type !== 'CREATE_ASHA_VISIT' || ['pending', 'updated'].includes(data.patientProjection));
+            // Synced means a durable receipt, not a completed patient projection.
+            // Retain patientProjection unchanged so callers can show pending work.
+            break;
+          case 'CREATE_DIAGNOSTIC_ORDER':
+            acknowledged = matchesText(data.patientId, submitted.patientId) && matchesText(data.facilityId, submitted.facilityId) &&
+              Array.isArray(submitted.tests) && submitted.tests.length > 0 && Array.isArray(data.tests) &&
+              data.tests.length === submitted.tests.length &&
+              submitted.tests.every((code, index) => matchesText(data.tests[index], code));
+            break;
+          case 'ADD_DIAGNOSTIC_RESULT':
+            acknowledged = data.id === submitted.orderId && Array.isArray(data.results) &&
+              data.results.some((entry: Record<string, unknown> | null) => entry && nonempty(entry.id) &&
+                matchesText(entry.testCode, submitted.testCode) && matchesText(entry.value, submitted.value) &&
+                typeof submitted.unit === 'string' && entry.unit === submitted.unit.trim() &&
+                ['NORMAL', 'ABNORMAL', 'CRITICAL'].includes(String(submitted.flag)) && entry.flag === submitted.flag &&
+                (submitted.referenceRange === undefined || matchesText(entry.referenceRange, submitted.referenceRange)));
+            break;
+          case 'UPDATE_DIAGNOSTIC_STATUS':
+            // Idempotent replay returns the original acknowledged snapshot, not current state.
+            acknowledged = data.id === submitted.orderId && data.status === submitted.status &&
+              ['ORDERED', 'SAMPLE_COLLECTED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED'].includes(data.status);
+            break;
+          case 'CREATE_PATIENT':
+            acknowledged = ['name', 'phone', 'village', 'district', 'languagePreference', 'gender']
+              .every(field => matchesText(data[field], submitted[field])) &&
+              typeof submitted.age === 'number' && data.age === submitted.age &&
+              data.abhaId === (submitted.abhaId ?? '') &&
+              ['trimester', 'nextVisitDate', 'lastVisit'].every(field => submitted[field] === undefined || data[field] === submitted[field]);
+            break;
+          case 'CREATE_REFERRAL':
+            acknowledged = matchesText(data.patientId, submitted.patientId);
+            break;
+          default:
+            acknowledged = false;
+        }
+      }
+      if (!result.ok || body?.success !== true || !acknowledged) {
+        throw Object.assign(new Error(result.status === 409 ? 'Server conflict. Local action retained for review; not synced.'
+          : typeof body?.error === 'string' ? body.error : `Server did not acknowledge action (${result.status})`), { rejectionStatus: result.status });
+      }
+      return data;
+    } finally { clearTimeout(timer); }
+  };
+  const service = {
+    async init() {
+      await load();
+      if (!networkStarted) {
+        NetInfo.addEventListener(state => {
+          online = state.isConnected !== false && state.isInternetReachable !== false;
+          notify();
+          if (online) void service.syncAll().catch(() => undefined);
+        });
+        networkStarted = true;
+      }
+    },
+    isOnline: () => online,
+    isSyncing: () => syncing,
+    lastError: () => error,
+    getPendingCount: () => actions.filter(a => a.status !== 'synced' && !a.discarded).length,
+    getActions: () => JSON.parse(JSON.stringify(actions)) as SyncAction[],
+    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    async enqueue(input: Omit<SyncAction, 'id' | 'status' | 'retryCount'>) {
+      await load();
+      await exclusive(async () => {
+        if (!types.includes(input.type) || !input.payload || !Number.isFinite(input.timestamp)) throw new Error('Invalid queued action');
+        const action: SyncAction = { ...JSON.parse(JSON.stringify(input)),
+          id: `action-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`,
+          status: 'pending', retryCount: 0, demo: input.demo || demoMode() };
+        await persist([...actions, action]);
+      });
+      if (online) void service.syncAll().catch(() => undefined);
+    },
+    async syncAll() {
+      await load();
+      if (syncing || !online) return;
+      syncing = true;
+      error = '';
+      notify();
+      let finished = false;
+      try {
+        const ids = actions.filter(a => a.status !== 'synced' && !a.discarded).map(a => a.id);
+        for (const id of ids) {
+          if (!online) break;
+          const action = actions.find(a => a.id === id)!;
+          await exclusive(() => persist(actions.map(a => a.id === id ? { ...a, status: 'syncing' } : a)));
+          let response: unknown;
+          try {
+            response = await processAction(action);
+          } catch (e) {
+            error = e instanceof Error ? e.message : 'Sync failed';
+            const rejectionStatus = e instanceof Error && 'rejectionStatus' in e && typeof e.rejectionStatus === 'number' ? e.rejectionStatus : undefined;
+            await exclusive(() => persist(actions.map(a => a.id === id ? { ...a, status: 'error', retryCount: a.retryCount + 1, error, rejectionStatus } : a)));
+            continue;
+          }
+          await exclusive(() => persist(actions.map(a => a.id === id ? { ...a, response, status: 'synced', error: undefined } : a)));
+        }
+        finished = true;
+      } finally {
+        syncing = false; notify();
+        if (finished && online && actions.some(a => a.status === 'pending' && !a.discarded)) {
+          setTimeout(() => { void service.syncAll().catch(() => undefined); }, 0);
+        }
+      }
+    },
+    async discardRejected(id: string) {
+      await load();
+      await exclusive(async () => {
+        const action = actions.find(a => a.id === id);
+        if (!action || action.status !== 'error' || ![400, 422].includes(action.rejectionStatus || 0)) {
+          throw new Error('Only definitively rejected actions can be discarded.');
+        }
+        await persist(actions.map(a => a.id === id ? { ...a, discarded: true } : a));
+      });
+    },
+    async seedDemoActions() {
+      await load();
+      if (actions.some(a => a.demo)) return;
+      for (let i = 0; i < 5; i++) await service.enqueue({ type: 'CREATE_REFERRAL', payload: { label: `Synthetic action ${i + 1}` }, timestamp: Date.now(), demo: true });
+    },
+  };
+  return service;
 }
+
+export const syncService = createSyncService(AsyncStorage, process.env.EXPO_PUBLIC_API_URL || '', fetch, isDemoActive);
+onDemoModeChange(() => { if (!isDemoActive()) void syncService.syncAll().catch(() => undefined); });

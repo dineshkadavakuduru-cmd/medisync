@@ -1,13 +1,17 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Alert, Modal, TextInput, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Modal, TextInput, Platform, Clipboard } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { teleconsultClient, TeleconsultRole, TeleconsultSession, TeleconsultStatus, Prescription, PrescriptionMedication } from '../services/teleconsultClient';
+import { teleconsultClient, TeleconsultRole, TeleconsultSession, TeleconsultStatus, DoctorAvailability, PrescriptionMedication } from '../services/teleconsultClient';
 import { TeleconsultMeeting } from '../components/TeleconsultMeeting';
 import { teleconsultCopy as copy } from '../i18n/translations/teleconsult';
+import { useTranslation } from '../i18n';
+import { isDemoActive, onDemoModeChange } from '../services/demoMode';
 
 export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
-  const sessionId = route.params?.sessionId as string;
+  const { language } = useTranslation();
+  const [isDemo, setIsDemo] = useState(isDemoActive);
+  const sessionId = typeof route.params?.sessionId === 'string' ? route.params.sessionId : '';
   const [session, setSession] = useState<TeleconsultSession | null>(null);
   const [role, setRole] = useState<TeleconsultRole>('patient');
   const [meetingOpen, setMeetingOpen] = useState(false);
@@ -21,16 +25,21 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
   const [prescriptionNotes, setPrescriptionNotes] = useState('');
   const [savingPrescription, setSavingPrescription] = useState(false);
   const [sessionTimer, setSessionTimer] = useState(0);
-  const [showTimer, setShowTimer] = useState(false);
+  const [targetMinutes, setTargetMinutes] = useState(30);
+  const [message, setMessage] = useState('');
+  const [prescriptionError, setPrescriptionError] = useState('');
+  const [availability, setAvailability] = useState<DoctorAvailability[]>([]);
+  const [availabilityError, setAvailabilityError] = useState('');
+  const [availabilityLoading, setAvailabilityLoading] = useState(false);
 
   const alive = useRef(false);
   const operation = useRef(false);
   const loadVersion = useRef(0);
+  const modeVersion = useRef(0);
   const meetingGeneration = useRef(0);
   const joinedGeneration = useRef<number | null>(null);
-  const timerInterval = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionStartTime = useRef<number | null>(null);
-  const autoEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prescriptionLock = useRef(false);
+  const copyTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const load = async () => {
     const version = ++loadVersion.current;
@@ -51,72 +60,87 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
     joinedGeneration.current = null;
     setMeetingOpen(false);
     setJoined(false);
-    stopTimer();
-    clearAutoEndTimer();
   };
 
-  const startTimer = () => {
-    if (sessionStartTime.current === null) {
-      sessionStartTime.current = Date.now();
-    }
-    setShowTimer(true);
-    timerInterval.current = setInterval(() => {
-      setSessionTimer(Date.now() - (sessionStartTime.current || Date.now()));
-    }, 1000);
-  };
+  const extendSession = () => setTargetMinutes(minutes => minutes + 5);
 
-  const stopTimer = () => {
-    if (timerInterval.current) {
-      clearInterval(timerInterval.current);
-      timerInterval.current = null;
-    }
-  };
+  useEffect(() => {
+    const start = session?.startedAt ? Date.parse(session.startedAt) : NaN;
+    if (!Number.isFinite(start)) { setSessionTimer(0); return; }
+    const tick = () => setSessionTimer(Math.max(0, Date.now() - start));
+    tick();
+    if (session?.status !== 'IN_PROGRESS') return;
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [session?.startedAt, session?.status]);
 
-  const clearAutoEndTimer = () => {
-    if (autoEndTimer.current) {
-      clearTimeout(autoEndTimer.current);
-      autoEndTimer.current = null;
-    }
-  };
-
-  const setAutoEndTimer = (durationMinutes: number) => {
-    clearAutoEndTimer();
-    autoEndTimer.current = setTimeout(() => {
-      if (alive.current && session?.status === 'IN_PROGRESS') {
-        update('COMPLETED');
-      }
-    }, durationMinutes * 60 * 1000);
-  };
-
-  const extendSession = () => {
-    if (autoEndTimer.current) {
-      clearAutoEndTimer();
-      setAutoEndTimer(5); // Extend by 5 minutes
-      Alert.alert('Session Extended', 'Session extended by 5 minutes');
-    }
-  };
+  useEffect(() => {
+    if (!showAvailability) return;
+    const currentMode = modeVersion.current;
+    let cancelled = false;
+    setAvailability([]);
+    setAvailabilityError('');
+    setAvailabilityLoading(false);
+    const doctorId = session?.doctorId || (isDemo ? 'demo-clinician' : '');
+    if (!doctorId) { setAvailabilityError(copy.availabilityMissing); return; }
+    setAvailabilityLoading(true);
+    teleconsultClient.getDoctorAvailability(doctorId).then(data => {
+      if (!cancelled && currentMode === modeVersion.current) setAvailability(data);
+    }).catch(e => {
+      if (!cancelled && currentMode === modeVersion.current) setAvailabilityError(e instanceof Error ? e.message : copy.error);
+    }).finally(() => { if (!cancelled && currentMode === modeVersion.current) setAvailabilityLoading(false); });
+    return () => { cancelled = true; };
+  }, [showAvailability, session?.doctorId, isDemo]);
 
   useEffect(() => {
     alive.current = true;
-    setSession(null);
-    closeMeeting();
-    void load();
-    const interval = setInterval(() => { if (!operation.current) void load(); }, 10000);
+    const reset = () => {
+      modeVersion.current += 1;
+      loadVersion.current += 1;
+      operation.current = false;
+      prescriptionLock.current = false;
+      setIsDemo(isDemoActive());
+      setBusy(false);
+      setSavingPrescription(false);
+      setSession(null);
+      setRole('patient');
+      setError('');
+      setMessage('');
+      setCopySuccess(false);
+      setTargetMinutes(30);
+      setSessionTimer(0);
+      setShowAvailability(false);
+      setAvailability([]);
+      setAvailabilityError('');
+      setAvailabilityLoading(false);
+      setShowPrescriptionModal(false);
+      setPrescriptionError('');
+      setPrescriptionMeds([{ name: '', dosage: '', frequency: '', duration: '', instructions: '' }]);
+      setPrescriptionNotes('');
+      closeMeeting();
+      if (copyTimeout.current) clearTimeout(copyTimeout.current);
+      void load();
+    };
+    reset();
+    const unsubscribeMode = onDemoModeChange(reset);
+    const interval = setInterval(() => { if (!operation.current && !prescriptionLock.current) void load(); }, 10000);
     const unsubscribe = navigation.addListener?.('blur', closeMeeting);
     return () => {
       alive.current = false;
+      modeVersion.current += 1;
       loadVersion.current += 1;
       meetingGeneration.current += 1;
       clearInterval(interval);
-      stopTimer();
-      clearAutoEndTimer();
+      if (copyTimeout.current) clearTimeout(copyTimeout.current);
       unsubscribe?.();
+      unsubscribeMode();
     };
   }, [sessionId]);
 
   const update = async (status: TeleconsultStatus, generation?: number) => {
-    if (operation.current || !alive.current) return;
+    if (operation.current || prescriptionLock.current || !alive.current) return;
     operation.current = true;
+    const currentMode = modeVersion.current;
     const version = ++loadVersion.current;
     setBusy(true);
     setError('');
@@ -128,10 +152,8 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
         ? current : await teleconsultClient.update(sessionId, status);
       if (!alive.current || version !== loadVersion.current) return;
       setSession(next);
-      if (status === 'IN_PROGRESS') {
+      if (status === 'IN_PROGRESS' && generation === meetingGeneration.current) {
         setJoined(true);
-        startTimer();
-        setAutoEndTimer(30); // Default 30 min session
       }
       if (['COMPLETED', 'CANCELLED', 'DECLINED'].includes(status)) {
         closeMeeting();
@@ -139,18 +161,20 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
     } catch (e) {
       if (alive.current && version === loadVersion.current) {
         setError(e instanceof Error ? e.message : copy.error);
-        if (generation !== undefined) joinedGeneration.current = null;
+        if (generation === meetingGeneration.current) joinedGeneration.current = null;
       }
     } finally {
-      operation.current = false;
-      if (alive.current) setBusy(false);
+      if (currentMode === modeVersion.current) {
+        operation.current = false;
+        if (alive.current) setBusy(false);
+      }
     }
   };
 
   const generation = meetingGeneration.current;
   const onJoined = () => {
     if (!alive.current || !meetingOpen || generation !== meetingGeneration.current ||
-        joinedGeneration.current === generation || operation.current) return;
+        joinedGeneration.current === generation || operation.current || prescriptionLock.current) return;
     joinedGeneration.current = generation;
     void update('IN_PROGRESS', generation);
   };
@@ -158,59 +182,76 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
     if (!alive.current || generation !== meetingGeneration.current) return;
     joinedGeneration.current = null;
     setJoined(false);
-    stopTimer();
-    clearAutoEndTimer();
   };
 
   const copyMeetingLink = async () => {
     if (!session?.meetingLink) return;
+    const currentMode = modeVersion.current;
     try {
       if (Platform.OS === 'web') {
-        await navigator.clipboard.writeText(session.meetingLink);
+        if (!globalThis.navigator?.clipboard?.writeText) throw new Error(copy.manualCopy);
+        await globalThis.navigator.clipboard.writeText(session.meetingLink);
       } else {
-        const { Clipboard } = await import('@react-native-clipboard/clipboard');
-        await Clipboard.setString(session.meetingLink);
+        Clipboard.setString(session.meetingLink);
       }
+      if (!alive.current || currentMode !== modeVersion.current) return;
       setCopySuccess(true);
-      setTimeout(() => setCopySuccess(false), 2000);
+      if (copyTimeout.current) clearTimeout(copyTimeout.current);
+      copyTimeout.current = setTimeout(() => setCopySuccess(false), 2000);
     } catch (e) {
-      console.error('Failed to copy link:', e);
+      if (alive.current && currentMode === modeVersion.current) setMessage(copy.manualCopy);
     }
   };
 
   const shareViaWhatsApp = async () => {
     if (!session?.meetingLink) return;
+    const currentMode = modeVersion.current;
     const message = `Join my MediSync teleconsultation: ${session.meetingLink}`;
     const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
     try {
       const { Linking } = await import('react-native');
+      if (!alive.current || currentMode !== modeVersion.current) return;
       await Linking.openURL(url);
     } catch (e) {
-      console.error('Failed to share via WhatsApp:', e);
+      if (alive.current && currentMode === modeVersion.current) setError(copy.shareFailed);
     }
   };
 
   const handleSavePrescription = async () => {
-    if (!session || prescriptionMeds.some(m => !m.name || !m.dosage || !m.frequency || !m.duration)) {
-      Alert.alert('Error', 'Please fill all required medication fields');
+    if (prescriptionLock.current || operation.current || !alive.current) return;
+    if (!session || role !== 'doctor' || session.status !== 'IN_PROGRESS' || session.prescription) {
+      setPrescriptionError(copy.prescriptionUnavailable); return;
+    }
+    const patientId = session.patientId || (isDemo ? 'demo-patient' : '');
+    const doctorId = session.doctorId || (isDemo ? 'demo-clinician' : '');
+    if (!patientId || !doctorId) { setPrescriptionError(copy.missingParticipants); return; }
+    if (!prescriptionMeds.length || prescriptionMeds.some(m => !m.name.trim() || !m.dosage.trim() || !m.frequency.trim() || !m.duration.trim())) {
+      setPrescriptionError(copy.requiredMedication);
       return;
     }
+    prescriptionLock.current = true;
+    const currentMode = modeVersion.current;
+    const version = ++loadVersion.current;
+    setPrescriptionError('');
     setSavingPrescription(true);
     try {
-      await teleconsultClient.createPrescription({
+      const prescription = await teleconsultClient.createPrescription({
         sessionId: session.id,
-        patientId: session.patientId || 'patient-1',
-        doctorId: 'doc-1', // In real app, get from auth
-        medications: prescriptionMeds,
-        notes: prescriptionNotes,
+        patientId, doctorId,
+        medications: prescriptionMeds.map(m => ({ name: m.name.trim(), dosage: m.dosage.trim(), frequency: m.frequency.trim(), duration: m.duration.trim(), instructions: m.instructions?.trim() })),
+        notes: prescriptionNotes.trim(),
       });
-      Alert.alert('Success', copy.prescriptionSaved);
+      if (!alive.current || version !== loadVersion.current) return;
+      setSession(current => current ? { ...current, patientId, doctorId, prescription } : current);
+      setMessage(isDemo ? copy.prescriptionSaved : copy.prescriptionSavedRemote);
       setShowPrescriptionModal(false);
-      void load(); // Reload to get updated session with prescription
     } catch (e) {
-      Alert.alert('Error', e instanceof Error ? e.message : 'Failed to save prescription');
+      if (alive.current && version === loadVersion.current) setPrescriptionError(e instanceof Error ? e.message : copy.error);
     } finally {
-      setSavingPrescription(false);
+      if (currentMode === modeVersion.current) {
+        prescriptionLock.current = false;
+        if (alive.current) setSavingPrescription(false);
+      }
     }
   };
 
@@ -231,9 +272,7 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
   };
 
   const formatTimeRemaining = () => {
-    if (!sessionStartTime.current) return '00:00';
-    const elapsed = Date.now() - sessionStartTime.current;
-    const remaining = Math.max(0, 30 * 60 * 1000 - elapsed);
+    const remaining = Math.max(0, targetMinutes * 60 * 1000 - sessionTimer);
     return formatTime(remaining);
   };
 
@@ -243,49 +282,38 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   const button = (label: string, action: () => void, secondary = false) => (
-    <TouchableOpacity accessibilityRole="button" disabled={busy}
-      style={[styles.button, secondary && styles.secondary, busy && styles.disabled]} onPress={action}>
+    <TouchableOpacity accessibilityRole="button" disabled={busy || savingPrescription}
+      style={[styles.button, secondary && styles.secondary, (busy || savingPrescription) && styles.disabled]} onPress={action}>
       <Text style={[styles.buttonText, secondary && styles.secondaryText]}>{label}</Text>
     </TouchableOpacity>
   );
 
-  // Get availability for the session's doctor
-  const availability = useMemo(() => {
-    if (!session) return [];
-    // In demo mode, show static availability
-    return [
-      { dayOfWeek: 1, startTime: '09:00', endTime: '13:00', isException: false },
-      { dayOfWeek: 1, startTime: '14:00', endTime: '17:00', isException: false },
-      { dayOfWeek: 2, startTime: '09:00', endTime: '13:00', isException: false },
-      { dayOfWeek: 2, startTime: '14:00', endTime: '17:00', isException: false },
-      { dayOfWeek: 3, startTime: '09:00', endTime: '13:00', isException: false },
-      { dayOfWeek: 3, startTime: '14:00', endTime: '17:00', isException: false },
-      { dayOfWeek: 4, startTime: '09:00', endTime: '13:00', isException: false },
-      { dayOfWeek: 4, startTime: '14:00', endTime: '17:00', isException: false },
-      { dayOfWeek: 5, startTime: '09:00', endTime: '13:00', isException: false },
-      { dayOfWeek: 5, startTime: '14:00', endTime: '17:00', isException: false },
-    ];
-  }, [session]);
-
-  const availabilityByDay = useMemo(() => {
-    const byDay: Record<number, typeof availability> = {};
-    availability.forEach(a => {
-      if (!byDay[a.dayOfWeek]) byDay[a.dayOfWeek] = [];
-      byDay[a.dayOfWeek].push(a);
-    });
-    return byDay;
-  }, [availability]);
+  const availabilityByDay: Record<number, DoctorAvailability[]> = {};
+  availability.filter(a => !a.isException).forEach(a => {
+    (availabilityByDay[a.dayOfWeek] ||= []).push(a);
+  });
 
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>{copy.title}</Text>
-          {teleconsultClient.isDemo && <Text style={styles.notice}>{copy.demo}</Text>}
+          {isDemo && <Text style={styles.notice}>{copy.demo}</Text>}
+          {!isDemo && <Text style={styles.notice}>{copy.backendNotice}</Text>}
+          {language !== 'en' && <Text style={styles.notice}>{copy.languageGap}</Text>}
           <Text style={styles.notice}>{copy.roles}</Text>
+          <View style={styles.row}>
+            {(['patient', 'doctor'] as const).map(value => (
+              <TouchableOpacity key={value} accessibilityRole="button" accessibilityState={{ selected: role === value }}
+                disabled={busy || savingPrescription || meetingOpen} style={[styles.role, role === value && styles.selected]}
+                onPress={() => setRole(value)}><Text>{copy[value]}</Text></TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        {button(copy.retry, () => { if (!operation.current) void load(); }, true)}
+        {button(copy.retry, () => { if (!operation.current && !prescriptionLock.current) void load(); }, true)}
+        {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+        {!!message && <Text style={styles.notice}>{message}</Text>}
 
         {!session ? (
           <Text style={styles.body}>{error ? copy.error : copy.loading}</Text>
@@ -296,7 +324,19 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
               <Text style={styles.body}>{copy.doctor}: {session.doctorName}</Text>
               <Text style={styles.body}>{copy.scheduled}: {formatDate(session.scheduledTime)} {formatTimeStr(session.scheduledTime)}</Text>
               <Text style={styles.body}>{copy.status}: {copy.statuses[session.status]}</Text>
+              {session.prescription && <View style={styles.prescriptionView}>
+                <Text style={styles.sectionTitle}>{copy.currentPrescription}</Text>
+                <Text style={styles.notice}>{copy.prescriptionNotice}</Text>
+                {session.prescription.medications.map((med, i) => <View key={i} style={styles.medicationRow}>
+                  <Text style={styles.medName}>{med.name}</Text>
+                  <Text style={styles.medDetails}>{med.dosage} / {med.frequency} / {med.duration}</Text>
+                  {!!med.instructions && <Text style={styles.medDetails}>{med.instructions}</Text>}
+                </View>)}
+                {!!session.prescription.notes && <Text style={styles.medNotes}>{session.prescription.notes}</Text>}
+              </View>}
             </View>
+
+            {['REQUESTED', 'ACCEPTED'].includes(session.status) && button(copy.cancel, () => void update('CANCELLED'), true)}
 
             {session.status === 'REQUESTED' && (
               <>
@@ -320,32 +360,9 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                     <Text style={styles.sectionTitle}>{copy.availability}</Text>
                     <TouchableOpacity style={styles.toggleButton} onPress={() => setShowAvailability(!showAvailability)}>
                       <Text style={styles.toggleButtonText}>
-                        {showAvailability ? 'Hide' : 'Show'} {copy.weeklySchedule}
+                        {copy.show} {copy.weeklySchedule}
                       </Text>
                     </TouchableOpacity>
-                    {showAvailability && (
-                      <View style={styles.availabilityGrid}>
-                        {dayNames.map((day, idx) => {
-                          const daySlots = availabilityByDay[idx];
-                          return (
-                            <View key={idx} style={styles.dayColumn}>
-                              <Text style={styles.dayHeader}>{day}</Text>
-                              {daySlots && daySlots.length > 0 ? (
-                                daySlots.map((slot, si) => (
-                                  <View key={si} style={styles.slot}>
-                                    <Text style={styles.slotTime}>
-                                      {slot.startTime} - {slot.endTime}
-                                    </Text>
-                                  </View>
-                                ))
-                              ) : (
-                                <Text style={styles.noSlots}>Off</Text>
-                              )}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
                   </View>
                 )}
 
@@ -360,12 +377,10 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                       <Text style={styles.actionButtonText}>{copySuccess ? copy.copied : copy.copyMeetingLink}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionButton, styles.secondaryAction]} onPress={shareViaWhatsApp}>
-                      <Text style={styles.actionButtonText}>{copy.shareViaWhatsApp}</Text>
+                      <Text style={[styles.actionButtonText, styles.secondaryText]}>{copy.shareViaWhatsApp}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
-
-                <Text style={styles.notice}>{copy.privacy}</Text>
 
                 {!meetingOpen ? (
                   button(copy.join, () => {
@@ -387,34 +402,22 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                     {/* Session Timer */}
                     <View style={styles.timerCard}>
                       <Text style={styles.timerLabel}>{copy.sessionTimer}</Text>
-                      <Text style={styles.timerValue}>{formatTime(sessionTimer)}</Text>
-                      <Text style={styles.timerRemaining}>{copy.timeRemaining}: {formatTimeRemaining()}</Text>
-                      {button(copy.extendSession, extendSession, true)}
+                      <Text style={styles.notice}>{copy.timerNotice}</Text>
+                      {session.startedAt ? <>
+                        <Text style={styles.timerValue}>{formatTime(sessionTimer)}</Text>
+                        <Text style={styles.timerRemaining}>{copy.timeRemaining}: {formatTimeRemaining()}</Text>
+                        {button(copy.extendSession, extendSession, true)}
+                      </> : <Text style={styles.body}>{copy.timerUnknown}</Text>}
                     </View>
 
                     {/* Prescription Writing (Doctor only) */}
-                    {role === 'doctor' && (
+                    {role === 'doctor' && !session.prescription && (
                       <View style={styles.section}>
                         <Text style={styles.sectionTitle}>{copy.prescription}</Text>
-                        {session.prescription ? (
-                          <View style={styles.prescriptionView}>
-                            <Text style={styles.sectionTitle}>Current Prescription</Text>
-                            {session.prescription.medications.map((med, i) => (
-                              <View key={i} style={styles.medicationRow}>
-                                <Text style={styles.medName}>{med.name}</Text>
-                                <Text style={styles.medDetails}>
-                                  {med.dosage} • {med.frequency} • {med.duration}
-                                  {med.instructions && ` • ${med.instructions}`}
-                                </Text>
-                              </View>
-                            ))}
-                            {session.prescription.notes && (
-                              <Text style={styles.medNotes}>Notes: {session.prescription.notes}</Text>
-                            )}
-                          </View>
-                        ) : (
-                          button(copy.writePrescription, () => setShowPrescriptionModal(true))
-                        )}
+                        <Text style={styles.notice}>{copy.prescriptionNotice}</Text>
+                        {!isDemo && (!session.patientId || !session.doctorId)
+                          ? <Text style={styles.error}>{copy.missingParticipants}</Text>
+                          : button(copy.writePrescription, () => setShowPrescriptionModal(true))}
                       </View>
                     )}
                   </>
@@ -427,24 +430,26 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                   </>
                 )}
 
-                {['REQUESTED', 'ACCEPTED'].includes(session.status) && button(copy.cancel, () => void update('CANCELLED'), true)}
               </>
             )}
           </>
         )}
       </ScrollView>
-    </SafeAreaView>
-  );
-  <Modal visible={showAvailability} animationType="slide" transparent={true}>
-    <View style={styles.modalOverlay} onTouchStart={() => setShowAvailability(false)}>
-      <View style={styles.modalCard} onTouchStart={e => e.stopPropagation()}>
+  <Modal visible={showAvailability} animationType="slide" transparent={true} onRequestClose={() => setShowAvailability(false)}>
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalCard}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{copy.availability}</Text>
           <TouchableOpacity style={styles.modalClose} onPress={() => setShowAvailability(false)}>
             <Text style={styles.modalCloseText}>✕</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView contentContainerStyle={styles.availabilityGrid}>
+        <ScrollView>
+          {isDemo && <Text style={styles.notice}>{copy.availabilityDemo}</Text>}
+          {availabilityLoading && <Text style={styles.body}>{copy.loading}</Text>}
+          {!!availabilityError && <Text accessibilityRole="alert" style={styles.error}>{availabilityError}</Text>}
+          {!availabilityLoading && !availabilityError && !availability.length && <Text>{copy.availabilityEmpty}</Text>}
+          <View style={styles.availabilityGrid}>
           {dayNames.map((day, idx) => {
             const daySlots = availabilityByDay[idx];
             return (
@@ -459,76 +464,88 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                     </View>
                   ))
                 ) : (
-                  <Text style={styles.noSlots}>Off</Text>
+                  <Text style={styles.noSlots}>-</Text>
                 )}
               </View>
             );
           })}
+          </View>
+          {availability.filter(a => a.isException).map((slot, index) => <Text key={index} style={styles.body}>
+            {copy.exceptionDates}: {slot.exceptionDate} {slot.startTime} - {slot.endTime}
+          </Text>)}
         </ScrollView>
       </View>
     </View>
   </Modal>
 
   {/* Prescription Modal */}
-  <Modal visible={showPrescriptionModal} animationType="slide" transparent={true}>
-    <View style={styles.modalOverlay} onTouchStart={() => setShowPrescriptionModal(false)}>
-      <View style={[styles.modalCard, { maxHeight: '90%' }]} onTouchStart={e => e.stopPropagation()}>
+  <Modal visible={showPrescriptionModal} animationType="slide" transparent={true} onRequestClose={() => { if (!savingPrescription) setShowPrescriptionModal(false); }}>
+    <View style={styles.modalOverlay}>
+      <View style={[styles.modalCard, { maxHeight: '90%' }]}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{copy.writePrescription}</Text>
-          <TouchableOpacity style={styles.modalClose} onPress={() => setShowPrescriptionModal(false)}>
+          <TouchableOpacity disabled={savingPrescription} style={styles.modalClose} onPress={() => setShowPrescriptionModal(false)}>
             <Text style={styles.modalCloseText}>✕</Text>
           </TouchableOpacity>
         </View>
         <ScrollView contentContainerStyle={styles.prescriptionContent}>
+          <Text style={styles.notice}>{copy.prescriptionNotice}</Text>
+          {!!prescriptionError && <Text accessibilityRole="alert" style={styles.error}>{prescriptionError}</Text>}
           {prescriptionMeds.map((med, idx) => (
             <View key={idx} style={styles.medicationForm}>
-              <Text style={styles.medNumber}>Medication #{idx + 1}</Text>
+              <Text style={styles.medNumber}>{copy.medication} #{idx + 1}</Text>
               <TextInput
                 style={styles.input}
+                editable={!savingPrescription}
                 placeholder={copy.medicationName}
                 value={med.name}
                 onChangeText={v => setPrescriptionMeds(prev => prev.map((m, i) => i === idx ? { ...m, name: v } : m))}
               />
               <View style={styles.inputRow}>
-                <TextInput style={styles.input} placeholder={copy.dosage} value={med.dosage}
+                <TextInput editable={!savingPrescription} style={styles.input} placeholder={copy.dosage} value={med.dosage}
                   onChangeText={v => setPrescriptionMeds(prev => prev.map((m, i) => i === idx ? { ...m, dosage: v } : m))} />
-                <TextInput style={styles.input} placeholder={copy.frequency} value={med.frequency}
+                <TextInput editable={!savingPrescription} style={styles.input} placeholder={copy.frequency} value={med.frequency}
                   onChangeText={v => setPrescriptionMeds(prev => prev.map((m, i) => i === idx ? { ...m, frequency: v } : m))} />
               </View>
               <View style={styles.inputRow}>
-                <TextInput style={styles.input} placeholder={copy.duration} value={med.duration}
+                <TextInput editable={!savingPrescription} style={styles.input} placeholder={copy.duration} value={med.duration}
                   onChangeText={v => setPrescriptionMeds(prev => prev.map((m, i) => i === idx ? { ...m, duration: v } : m))} />
               </View>
               <TextInput
                 style={styles.input}
                 placeholder={copy.instructions}
+                editable={!savingPrescription}
                 value={med.instructions}
                 onChangeText={v => setPrescriptionMeds(prev => prev.map((m, i) => i === idx ? { ...m, instructions: v } : m))}
               />
               {prescriptionMeds.length > 1 && (
-                <TouchableOpacity style={styles.removeButton} onPress={() => removeMedication(idx)}>
-                  <Text style={styles.removeButtonText}>Remove</Text>
+                <TouchableOpacity disabled={savingPrescription} style={styles.removeButton} onPress={() => removeMedication(idx)}>
+                  <Text style={styles.removeButtonText}>{copy.remove}</Text>
                 </TouchableOpacity>
               )}
             </View>
           ))}
-          <TouchableOpacity style={styles.addButton} onPress={addMedication}>
+          <TouchableOpacity disabled={savingPrescription} style={styles.addButton} onPress={addMedication}>
             <Text style={styles.addButtonText}>+ {copy.addMedication}</Text>
           </TouchableOpacity>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder={copy.instructions}
+            placeholder={copy.notes}
+            editable={!savingPrescription}
             value={prescriptionNotes}
             onChangeText={setPrescriptionNotes}
+            maxLength={500}
             multiline
           />
           <TouchableOpacity style={[styles.submitButton, savingPrescription && styles.disabled]} onPress={handleSavePrescription} disabled={savingPrescription}>
-            <Text style={styles.submitButtonText}>{savingPrescription ? 'Saving...' : copy.savePrescription}</Text>
+            <Text style={styles.submitButtonText}>{savingPrescription ? copy.saving : copy.savePrescription}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
     </View>
   </Modal>
+    </SafeAreaView>
+  );
 };
 
 const styles = StyleSheet.create({
@@ -552,7 +569,7 @@ const styles = StyleSheet.create({
   toggleButton: { backgroundColor: COLORS.primaryLight, padding: 12, borderRadius: 8, alignItems: 'center' },
   toggleButtonText: { color: COLORS.primary, fontWeight: '600' },
   availabilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  dayColumn: { flex: 1, minWidth: 40, alignItems: 'center', gap: 4 },
+  dayColumn: { minWidth: 110, alignItems: 'center', gap: 4 },
   dayHeader: { fontSize: 12, fontWeight: '700', color: COLORS.textPrimary },
   slot: { backgroundColor: COLORS.surface, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: COLORS.border },
   slotTime: { fontSize: 11, color: COLORS.textPrimary, fontWeight: '500' },
@@ -578,12 +595,11 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
   modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
   modalCloseText: { fontSize: 18, color: COLORS.textSecondary, fontWeight: '700' },
-  availabilityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, maxHeight: 300 },
   prescriptionContent: { gap: 16 },
   medicationForm: { backgroundColor: COLORS.background, padding: 16, borderRadius: 12, gap: 12, borderWidth: 1, borderColor: COLORS.border },
   medNumber: { fontSize: 14, fontWeight: '700', color: COLORS.primary },
-  inputRow: { flexDirection: 'row', gap: 8 },
-  input: { flex: 1, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 12, color: COLORS.textPrimary, fontSize: 14 },
+  inputRow: { gap: 8 },
+  input: { borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 12, color: COLORS.textPrimary, fontSize: 14 },
   textArea: { minHeight: 80 },
   removeButton: { marginTop: 8, padding: 8, backgroundColor: '#FFEBEE', borderRadius: 8, alignItems: 'center' },
   removeButtonText: { color: COLORS.danger, fontWeight: '600' },
@@ -591,5 +607,4 @@ const styles = StyleSheet.create({
   addButtonText: { color: COLORS.primary, fontWeight: '600' },
   submitButton: { backgroundColor: COLORS.primary, padding: 16, borderRadius: 10, alignItems: 'center', marginTop: 16 },
   submitButtonText: { color: COLORS.textOnPrimary, fontWeight: '700', fontSize: 16 },
-  disabled: { opacity: 0.5 },
 });

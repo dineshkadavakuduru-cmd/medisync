@@ -12,15 +12,17 @@ import {
   seedAmbulances,
   seedDemoEmergencies,
   emergencies,
+  stopEmergencyTimers,
 } from '../services/emergencyService.js';
 
 const emergenciesRoutes: FastifyPluginAsync = async (fastify) => {
+  fastify.addHook('onClose', async () => stopEmergencyTimers());
   seedAmbulances();
   seedDemoEmergencies();
 
   fastify.post<{ Body: { patientId?: string; patientName: string; patientAge: number; patientGender: string; condition: string; description: string; originFacilityId: string; initiatedBy: string }; Reply: ApiResponse<Emergency> }>(
     '/api/emergencies',
-    async (request, reply) => {
+    async (request) => {
       const body = request.body as { patientId?: string; patientName: string; patientAge: number; patientGender: string; condition: string; description: string; originFacilityId: string; initiatedBy: string };
       const emergency = createEmergency(body);
       return { success: true, data: emergency };

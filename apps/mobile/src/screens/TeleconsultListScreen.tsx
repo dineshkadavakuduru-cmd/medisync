@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,8 @@ import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { teleconsultClient, TeleconsultSession } from '../services/teleconsultClient';
 import { teleconsultCopy as copy } from '../i18n/translations/teleconsult';
+import { useTranslation } from '../i18n';
+import { isDemoActive, onDemoModeChange } from '../services/demoMode';
 
 const STATUS_COLORS: Record<string, string> = {
   REQUESTED: COLORS.warning,
@@ -24,21 +26,23 @@ const STATUS_COLORS: Record<string, string> = {
 
 type FilterTab = 'all' | 'upcoming' | 'past';
 type StatusFilter = 'all' | 'REQUESTED' | 'ACCEPTED' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
-type SpecialtyFilter = 'all' | 'General Physician' | 'Cardiologist' | 'Pediatrician' | 'Neurologist';
 
 export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
+  const { language } = useTranslation();
+  const [isDemo, setIsDemo] = useState(isDemoActive);
   const [sessions, setSessions] = useState<TeleconsultSession[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [specialtyFilter, setSpecialtyFilter] = useState<SpecialtyFilter>('all');
+  const [specialtyFilter, setSpecialtyFilter] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   const active = useRef(false);
   const createLock = useRef(false);
   const version = useRef(0);
+  const modeVersion = useRef(0);
 
   const loadSessions = async () => {
     const current = ++version.current;
@@ -58,9 +62,24 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
 
   useEffect(() => {
     active.current = true;
+    setIsDemo(isDemoActive());
     void loadSessions();
+    const unsubscribeMode = onDemoModeChange(() => {
+      modeVersion.current += 1;
+      version.current += 1;
+      createLock.current = false;
+      setIsDemo(isDemoActive());
+      setSessions([]);
+      setError('');
+      setCreating(false);
+      setFilterTab('all');
+      setStatusFilter('all');
+      setSpecialtyFilter(null);
+      setShowFilters(false);
+      void loadSessions();
+    });
     const unsubscribe = navigation.addListener?.('focus', () => void loadSessions());
-    return () => { active.current = false; version.current += 1; unsubscribe?.(); };
+    return () => { active.current = false; version.current += 1; modeVersion.current += 1; unsubscribeMode(); unsubscribe?.(); };
   }, [navigation]);
 
   const onRefresh = async () => {
@@ -68,27 +87,25 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
   };
 
   const createDemo = async () => {
-    if (createLock.current) return;
+    if (createLock.current || !active.current || !isDemoActive()) return;
+    const currentMode = modeVersion.current;
     createLock.current = true;
     setCreating(true);
     setError('');
     try {
       const session = await teleconsultClient.createDemo();
-      if (active.current) {
+      if (active.current && currentMode === modeVersion.current) {
         await loadSessions();
-        navigation.navigate('TeleconsultJoin', { sessionId: session.id });
+        if (active.current && currentMode === modeVersion.current) navigation.navigate('TeleconsultJoin', { sessionId: session.id });
       }
     } catch (e) {
-      if (active.current) setError(e instanceof Error ? e.message : copy.error);
+      if (active.current && currentMode === modeVersion.current) setError(e instanceof Error ? e.message : copy.error);
     } finally {
-      createLock.current = false;
-      if (active.current) setCreating(false);
+      if (currentMode === modeVersion.current) {
+        createLock.current = false;
+        if (active.current) setCreating(false);
+      }
     }
-  };
-
-  const formatDateTime = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
   };
 
   const formatDate = (dateStr: string) => {
@@ -96,39 +113,13 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
     return date.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
   };
 
-  const now = Date.now();
-
-  // Filter sessions based on tabs and filters
-  const filteredSessions = useMemo(() => {
-    let result = sessions;
-
-    // Tab filter
-    if (filterTab === 'upcoming') {
-      result = result.filter(s => new Date(s.scheduledTime).getTime() >= now && ['REQUESTED', 'ACCEPTED'].includes(s.status));
-    } else if (filterTab === 'past') {
-      result = result.filter(s => new Date(s.scheduledTime).getTime() < now || ['COMPLETED', 'CANCELLED', 'DECLINED'].includes(s.status));
-    }
-
-    // Status filter
-    if (statusFilter !== 'all') {
-      result = result.filter(s => s.status === statusFilter);
-    }
-
-    // Specialty filter (in real app, this would come from doctor data)
-    if (specialtyFilter !== 'all') {
-      // For demo, we'll filter by doctor name containing specialty
-      // In real app, this would be a proper doctor lookup
-      result = result.filter(s => {
-        if (specialtyFilter === 'General Physician') return s.doctorName.includes('शर्मा');
-        if (specialtyFilter === 'Cardiologist') return s.doctorName.includes('पाटिल');
-        if (specialtyFilter === 'Pediatrician') return s.doctorName.includes('शिंदे');
-        if (specialtyFilter === 'Neurologist') return s.doctorName.includes('कुलकर्णी');
-        return true;
-      });
-    }
-
-    return result;
-  }, [sessions, filterTab, statusFilter, specialtyFilter]);
+  const specialties = [...new Set(sessions.map(s => s.doctorSpecialty?.trim() || s.specialty?.trim()).filter((s): s is string => !!s))];
+  const filteredSessions = sessions.filter(s => {
+    const closed = ['COMPLETED', 'CANCELLED', 'DECLINED'].includes(s.status);
+    return (filterTab === 'all' || (filterTab === 'past' ? closed : !closed)) &&
+      (statusFilter === 'all' || s.status === statusFilter) &&
+      (specialtyFilter === null || (s.doctorSpecialty?.trim() || s.specialty?.trim()) === specialtyFilter);
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -139,6 +130,8 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{copy.title}</Text>
           <Text style={styles.headerSubtitle}>{copy.subtitle}</Text>
+          {language !== 'en' && <Text style={styles.notice}>{copy.languageGap}</Text>}
+          {!isDemo && <Text style={styles.notice}>{copy.backendNotice}</Text>}
         </View>
 
         {/* Filter Tabs */}
@@ -156,7 +149,7 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
           ))}
         </View>
 
-        {teleconsultClient.isDemo && <>
+        {isDemo && <>
           <Text style={styles.notice}>{copy.demo}</Text>
           <TouchableOpacity accessibilityRole="button" disabled={creating} style={styles.action} onPress={createDemo}>
             <Text style={styles.actionText}>{creating ? copy.loading : copy.create}</Text>
@@ -166,7 +159,7 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
         {/* Filter Controls */}
         <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters(!showFilters)}>
           <Text style={styles.filterToggleText}>
-            {showFilters ? 'Hide Filters' : 'Show Filters'} {' ▾'}
+            {showFilters ? copy.hideFilters : copy.showFilters}
           </Text>
         </TouchableOpacity>
 
@@ -182,7 +175,7 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
                     onPress={() => setStatusFilter(sf)}
                   >
                     <Text style={[styles.filterChipText, statusFilter === sf && styles.filterChipTextActive]}>
-                      {sf === 'all' ? 'All' : copy.statuses[sf]}
+                      {sf === 'all' ? copy.all : copy.statuses[sf]}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -192,18 +185,19 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
             <View style={styles.filterRow}>
               <Text style={styles.filterLabel}>{copy.filterBySpecialty}</Text>
               <View style={styles.filterChips}>
-                {(['all', 'General Physician', 'Cardiologist', 'Pediatrician', 'Neurologist'] as SpecialtyFilter[]).map((sp) => (
+                {[null, ...specialties].map((sp) => (
                   <TouchableOpacity
-                    key={sp}
+                    key={sp === null ? 'all' : `specialty-${sp}`}
                     style={[styles.filterChip, specialtyFilter === sp && styles.filterChipActive]}
                     onPress={() => setSpecialtyFilter(sp)}
                   >
                     <Text style={[styles.filterChipText, specialtyFilter === sp && styles.filterChipTextActive]}>
-                      {sp}
+                      {sp ?? copy.all}
                     </Text>
                   </TouchableOpacity>
                 ))}
               </View>
+              {!specialties.length && <Text style={styles.notice}>{copy.specialtyMissing}</Text>}
             </View>
           </View>
         )}
@@ -216,9 +210,9 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
 
         {filteredSessions.length === 0 && !refreshing && !error ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyTitle}>{copy.empty}</Text>
+            <Text style={styles.emptyTitle}>{sessions.length ? copy.noMatches : copy.empty}</Text>
             <Text style={styles.emptySubtitle}>
-              {filterTab !== 'all' ? 'No consultations in this category' : 'Create a demo to get started'}
+              {isDemo && !sessions.length ? copy.create : copy.retry}
             </Text>
           </View>
         ) : (
@@ -238,6 +232,7 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
                 </View>
                 <View style={styles.cardMeta}>
                   <Text style={styles.doctorName}>{session.doctorName}</Text>
+                  {!!(session.doctorSpecialty || session.specialty) && <Text style={styles.doctorName}>{session.doctorSpecialty || session.specialty}</Text>}
                   <Text style={styles.time}>
                     {formatDate(session.scheduledTime)} • {formatTimeStr(session.scheduledTime)}
                   </Text>

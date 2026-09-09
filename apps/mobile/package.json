@@ -10,7 +10,7 @@
     "dev": "expo start",
     "build": "expo export -p web",
     "build:web": "expo export -p web",
-    "lint": "eslint . --ext .ts,.tsx",
+    "lint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

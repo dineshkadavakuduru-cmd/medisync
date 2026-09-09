@@ -29,12 +29,17 @@ test('mobile export keeps onboarding and bottom navigation inside the app frame'
   try {
     browser = await chromium.launch({ headless: true });
     for (const width of [1280, 375, 320]) {
-      const page = await browser.newPage({ viewport: { width, height: 812 } });
+      const page = await browser.newPage({ viewport: { width, height: 812 }, serviceWorkers: 'block' });
       const errors = [];
       page.on('pageerror', error => errors.push(error.message));
-      // Exercise the existing offline fallback without touching a real backend.
-      await page.route('**/api/**', route => route.abort());
-      await page.goto(process.env.MOBILE_TEST_URL || `http://127.0.0.1:${server.address().port}/`);
+      const target = new URL(process.env.MOBILE_TEST_URL || `http://127.0.0.1:${server.address().port}/`);
+      assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(target.hostname), 'Use a local static server');
+      await page.route('**/*', route => {
+        const url = new URL(route.request().url());
+        return url.origin === target.origin && !/^\/api(?:\/|$)/.test(url.pathname) ? route.continue() : route.abort();
+      });
+      await page.routeWebSocket('**/*', socket => socket.close());
+      await page.goto(target.href);
       const title = page.getByText('Unified Healthcare', { exact: true });
       await title.waitFor({ state: 'visible' });
       const slide = await title.locator('..').boundingBox();
@@ -45,24 +50,27 @@ test('mobile export keeps onboarding and bottom navigation inside the app frame'
       await page.getByText('Get Started', { exact: false }).click();
       await page.getByText('Queue Management', { exact: true }).waitFor();
       assert.equal(await page.getByText('Active View:', { exact: true }).count(), 0);
-      const tabs = page.getByRole('tablist').getByRole('link');
-      assert.equal(await tabs.count(), 8);
+      const tabs = page.getByRole('tab');
+      assert.equal(await tabs.count(), 5);
+      assert.deepEqual(await tabs.evaluateAll(items => items.map(item => item.getAttribute('aria-label'))), ['Home', 'Triage', 'Patients', 'Facility', 'More']);
+      const sos = await page.getByTestId('global-sos').boundingBox();
+      assert.ok(sos && sos.y + sos.height <= 813);
       for (const tab of await tabs.all()) {
         const box = await tab.boundingBox();
         assert.ok(box && box.x >= (width - frameWidth) / 2 - 1 && box.x + box.width <= (width + frameWidth) / 2 + 1);
-        assert.ok(box.y >= 700 && box.y + box.height <= 813, `${width}px: bottom tab must remain in viewport`);
+        assert.ok(box.y > 406 && box.y + box.height <= sos.y + 1, `${width}px: bottom tab remains above SOS`);
       }
       await tabs.nth(1).click();
       await tabs.nth(0).click();
       await page.getByText('Queue Management', { exact: true }).waitFor();
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
-      await page.getByText('AD', { exact: true }).click();
-      await page.getByText('Switch Persona / Role:', { exact: true }).waitFor();
-      await page.getByText(/ Patient$/, { exact: true }).click();
-      await page.getByText('Close Profile', { exact: true }).click();
+      await page.getByTestId('home-profile').click();
+      await page.getByText('Switch demo persona', { exact: true }).waitFor();
+      await page.getByRole('button', { name: 'Patient', exact: true }).click();
+      await page.getByRole('button', { name: 'Close profile', exact: true }).click();
       await page.getByText('Active Medicines', { exact: true }).waitFor();
       assert.deepEqual(errors, [], `${width}px: no uncaught JavaScript errors`);
-      console.log(`Verified ${width}px: onboarding, dashboard, seven bottom tabs, navigation, no page overflow`);
+      console.log(`Verified ${width}px: onboarding, dashboard, five fixed tabs, global SOS, navigation, no page overflow`);
       await page.close();
     }
   } finally {

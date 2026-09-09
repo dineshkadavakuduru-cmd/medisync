@@ -26,18 +26,7 @@ interface TriageResult {
 export const TriageScreen: React.FC = () => {
   const navigation = useNavigation();
   const { t } = useTranslation();
-  const [recentAssessments, setRecentAssessments] = React.useState<TriageResult[]>([]);
-
-  React.useEffect(() => {
-    loadRecentAssessments();
-  }, []);
-
-  const loadRecentAssessments = async () => {
-    try {
-    } catch (e) {
-      console.error(e);
-    }
-  };
+  const [recentAssessments] = React.useState<TriageResult[]>([]);
 
   const EmptyState = () => (
     <View style={styles.emptyState}>

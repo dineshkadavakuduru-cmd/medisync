@@ -1,6 +1,6 @@
 import { Facility, StaffMember, StaffRole, Emergency, EmergencyEvent, EmergencyProtocolLevel, EmergencyStatus, Ambulance, EmergencyStats } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
-import { getStaff, setStaff, generateFacilityStaff } from './staffService.js';
+import { getStaff } from './staffService.js';
 import { getFirstAidSteps } from './firstAidService.js';
 import { broadcast } from '../websocket/realtime.js';
 
@@ -69,6 +69,11 @@ const VALID_TRANSITIONS: Record<EmergencyStatus, EmergencyStatus[]> = {
 
 const escalationTimers: Map<string, NodeJS.Timeout> = new Map();
 
+export function stopEmergencyTimers() {
+  for (const timer of escalationTimers.values()) clearTimeout(timer);
+  escalationTimers.clear();
+}
+
 function generateId(): string {
   return `emg-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
@@ -113,17 +118,18 @@ export function sendWebSocket(payload: NotificationPayload) {
     data: payload,
     timestamp: new Date().toISOString(),
   });
-  console.log('📡 WebSocket broadcast sent:', payload.title);
+  return { success: true, channel: 'WebSocket', status: 'broadcast_attempted', deliveryConfirmed: false };
 }
 
 export async function sendPushNotification(payload: NotificationPayload) {
-  console.log('📲 Push notification would be sent:', { title: payload.title, body: payload.body, to: payload.recipients });
-  return { success: true, channel: 'FCM', messageId: `fcm-${Date.now()}` };
+  void payload;
+  return { success: false, channel: 'PUSH', mode: 'unconfigured', delivered: false, error: 'Push provider unconfigured; nothing sent' };
 }
 
 export async function sendSMS(phone: string, message: string) {
-  console.log('📱 SMS would be sent:', { to: phone, message: message.substring(0, 160) });
-  return { success: true, channel: 'SMS', messageId: `sms-${Date.now()}` };
+  void phone;
+  void message;
+  return { success: false, channel: 'SMS', mode: 'unconfigured', delivered: false, error: 'SMS provider unconfigured; nothing sent' };
 }
 
 export async function dispatchEmergencyAlert(emergency: Emergency, facilities: Facility[], staff: StaffMember[]) {
@@ -151,14 +157,13 @@ export async function dispatchEmergencyAlert(emergency: Emergency, facilities: F
     await sendSMS(doc.phone, `EMERGENCY at ${getFacilityName(emergency.originFacilityId)}: ${emergency.condition} - ${emergency.patientName}. Respond immediately.`);
   }
 
-  if (emergency.protocolLevel === 'LEVEL_1') {
-    console.log('📞 DISTRICT HEALTH OFFICER notified via all channels');
-    await sendSMS('9876543210', `LEVEL 1 EMERGENCY: ${emergency.condition} at ${getFacilityName(emergency.originFacilityId)}. Immediate attention required.`);
-  }
-
   return {
-    channels: ['WebSocket', 'FCM', 'SMS'],
-    recipientCount: relevantStaff.length + (emergency.protocolLevel === 'LEVEL_1' ? 1 : 0),
+    mode: 'demo',
+    channels: ['WebSocket'],
+    unconfiguredChannels: ['PUSH', 'SMS'],
+    deliveryConfirmed: false,
+    recipientCount: 0,
+    intendedRecipientCount: relevantStaff.length,
     timestamp: new Date().toISOString(),
   };
 }
@@ -177,7 +182,7 @@ function startAutoEscalation(emergency: Emergency) {
         id: generateId(),
         timestamp: new Date().toISOString(),
         event: 'AUTO_ESCALATED',
-        description: `Emergency auto-escalated — no acknowledgment received within ${protocol.autoEscalateAfterMinutes} minutes. District Health Officer notified.`,
+        description: `Emergency auto-escalated: no acknowledgment received within ${protocol.autoEscalateAfterMinutes} minutes. External notification providers unconfigured; officer delivery not confirmed.`,
         automated: true,
       });
       broadcast({ type: 'EMERGENCY_ESCALATED', facilityId: emg.originFacilityId, data: emg, timestamp: new Date().toISOString() });

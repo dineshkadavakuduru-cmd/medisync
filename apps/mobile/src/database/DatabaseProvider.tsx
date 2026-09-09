@@ -17,4 +17,8 @@ export const database = new Database({
 });
 
 export { models } from './index';
-export type { Patient, HealthRecord, Referral, Facility, Alert } from './models';
+export type { default as Patient } from './models/Patient';
+export type { default as HealthRecord } from './models/HealthRecord';
+export type { default as Referral } from './models/Referral';
+export type { default as Facility } from './models/Facility';
+export type { default as Alert } from './models/Alert';

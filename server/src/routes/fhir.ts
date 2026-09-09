@@ -5,7 +5,6 @@ import {
   generateFhirEncounter,
   generateFhirObservation,
   generateFhirCondition,
-  generateFhirReferral,
   generateFhirBundle,
   importFhirBundle,
 } from '../services/fhirService.js';
@@ -17,11 +16,22 @@ import {
   getConsentsByPatient,
   generateAbdmPatientOtp,
   verifyAbdmOtp,
+  abhaSchema, consentSchema, consentStatusSchema,
 } from '../services/abdmService.js';
 import { mockFacilities } from '../database/facilities.js';
 import { patients as mockPatients } from '../database/patients.js';
+import { z } from 'zod';
+import { emptyQuery, idParams, idSchema, validationErrors } from '../validation.js';
 
 const fhirRoutes: FastifyPluginAsync = async (fastify) => {
+  validationErrors(fastify);
+  fastify.addHook('preValidation', async request => {
+    if (!request.routeOptions.url?.startsWith('/api/abdm/')) return;
+    emptyQuery.parse(request.query);
+    if (request.routeOptions.url.includes(':abhaId')) z.object({ abhaId: abhaSchema }).strict().parse(request.params);
+    if (request.routeOptions.url.includes(':id')) idParams.parse(request.params);
+    if (request.routeOptions.url.includes(':abhaId') && request.method === 'POST') emptyQuery.optional().parse(request.body);
+  });
   fastify.get<{
     Params: { abhaId: string };
     Reply: ApiResponse<ReturnType<typeof generateFhirPatient>>;
@@ -90,28 +100,28 @@ const fhirRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post<{
     Params: { abhaId: string };
     Reply: ApiResponse<{ valid: boolean; message: string; name?: string; age?: number }>;
-  }>('/api/abdm/verify/:abhaId', async (request) => {
+  }>('/api/abdm/verify/:abhaId', { bodyLimit: 1024 }, async (request, reply) => {
     const { abhaId } = request.params as { abhaId: string };
     const result = await verifyHealthId(abhaId);
-    return { success: true, data: result };
+    return reply.code(503).send({ success: false, error: result.message, data: result });
   });
 
   fastify.post<{
     Params: { abhaId: string };
-    Reply: ApiResponse<{ success: boolean; txnId: string; message: string }>;
-  }>('/api/abdm/generate-otp/:abhaId', async (request) => {
+    Reply: ApiResponse<Awaited<ReturnType<typeof generateAbdmPatientOtp>>>;
+  }>('/api/abdm/generate-otp/:abhaId', { bodyLimit: 1024 }, async (request, reply) => {
     const { abhaId } = request.params as { abhaId: string };
     const result = await generateAbdmPatientOtp(abhaId);
-    return { success: true, data: result };
+    return reply.code(503).send({ success: false, error: result.message, data: result });
   });
 
   fastify.post<{
     Body: { txnId: string; otp: string };
     Reply: ApiResponse<{ success: boolean; message: string }>;
-  }>('/api/abdm/verify-otp', async (request) => {
-    const { txnId, otp } = request.body as { txnId: string; otp: string };
+  }>('/api/abdm/verify-otp', { bodyLimit: 1024 }, async (request, reply) => {
+    const { txnId, otp } = z.object({ txnId: idSchema, otp: z.string().regex(/^[0-9]{6}$/) }).strict().parse(request.body);
     const result = await verifyAbdmOtp(txnId, otp);
-    return { success: true, data: result };
+    return reply.code(503).send({ success: false, error: result.message, data: result });
   });
 
   fastify.post<{
@@ -126,8 +136,8 @@ const fhirRoutes: FastifyPluginAsync = async (fastify) => {
       validTo: string;
     };
     Reply: ApiResponse<ReturnType<typeof generateConsentArtifact>>;
-  }>('/api/abdm/consent', async (request) => {
-    const body = request.body as any;
+  }>('/api/abdm/consent', { bodyLimit: 8192 }, async (request) => {
+    const body = consentSchema.parse(request.body);
     const consent = generateConsentArtifact(body);
     return { success: true, data: consent };
   });
@@ -135,11 +145,11 @@ const fhirRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get<{
     Params: { id: string };
     Reply: ApiResponse<ReturnType<typeof getConsent>>;
-  }>('/api/abdm/consent/:id', async (request) => {
+  }>('/api/abdm/consent/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     const consent = getConsent(id);
     if (!consent) {
-      return { success: false, error: 'Consent not found' } as any;
+      return reply.code(404).send({ success: false, error: 'Consent not found' });
     }
     return { success: true, data: consent };
   });
@@ -148,10 +158,10 @@ const fhirRoutes: FastifyPluginAsync = async (fastify) => {
     Params: { id: string };
     Body: { status: string };
     Reply: ApiResponse<ReturnType<typeof updateConsentStatus>>;
-  }>('/api/abdm/consent/:id/status', async (request, reply) => {
+  }>('/api/abdm/consent/:id/status', { bodyLimit: 1024 }, async (request, reply) => {
     const { id } = request.params as { id: string };
-    const { status } = request.body as { status: string };
-    const consent = updateConsentStatus(id, status as any);
+    const { status } = z.object({ status: consentStatusSchema }).strict().parse(request.body);
+    const consent = updateConsentStatus(id, status);
     if (!consent) {
       return reply.status(404).send({ success: false, error: 'Consent not found' });
     }

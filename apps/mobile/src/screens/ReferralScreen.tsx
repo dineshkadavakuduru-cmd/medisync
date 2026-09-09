@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,11 +6,17 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  TextInput,
 } from 'react-native';
-import { COLORS, TriageSeverity, ReferralStatus, FacilityType } from '@medisync/shared';
+import { COLORS, TriageSeverity, ReferralStatus } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { SeverityIndicator } from '../components/SeverityIndicator';
+import { NavigationProp, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
+import { syncService } from '../services/syncService';
+
+type ReferralRoutes = {
+  Referral: { patientId?: string; facilityId?: string } | undefined;
+  TriageFlow: { patientId?: string; facilityId?: string };
+};
 
 interface Referral {
   id: string;
@@ -66,7 +72,45 @@ const statusConfig = {
 };
 
 export const ReferralScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp<ReferralRoutes>>();
+  const route = useRoute<RouteProp<ReferralRoutes, 'Referral'>>();
   const [segment, setSegment] = useState<'active' | 'history'>('active');
+  const [actions, setActions] = useState(() => syncService.getActions());
+  const [syncing, setSyncing] = useState(syncService.isSyncing());
+  const [queueError, setQueueError] = useState('');
+  const retryLock = useRef(false);
+  const mounted = useRef(false);
+  const referralActions = actions.filter(action => action.type === 'CREATE_REFERRAL' &&
+    (!route.params?.patientId || action.payload.patientId === route.params.patientId));
+
+  useEffect(() => {
+    mounted.current = true;
+    const update = () => {
+      setActions(syncService.getActions());
+      setSyncing(syncService.isSyncing());
+    };
+    const unsubscribe = syncService.subscribe(update);
+    update();
+    void syncService.init().catch(e => {
+      if (mounted.current) setQueueError(e instanceof Error ? e.message : 'Unable to load the saved queue.');
+    });
+    return () => { mounted.current = false; unsubscribe(); };
+  }, []);
+
+  const retryQueue = async () => {
+    if (retryLock.current || syncService.isSyncing()) return;
+    retryLock.current = true;
+    setQueueError('');
+    try {
+      // Replay existing IDs through the outbox; never enqueue another copy on retry.
+      await syncService.syncAll();
+      if (mounted.current && !syncService.isOnline()) setQueueError('Offline. Referrals remain saved on this device.');
+    } catch (e) {
+      if (mounted.current) setQueueError(e instanceof Error ? e.message : 'Unable to retry the saved queue.');
+    } finally {
+      retryLock.current = false;
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -96,12 +140,30 @@ export const ReferralScreen: React.FC = () => {
       </View>
 
       {/* Create Referral Button */}
-      <TouchableOpacity style={styles.createButton}>
+      <TouchableOpacity style={styles.createButton} onPress={() => navigation.navigate('TriageFlow', { patientId: route.params?.patientId, facilityId: route.params?.facilityId })}>
         <Text style={styles.createButtonText}>+ Create New Referral</Text>
       </TouchableOpacity>
 
       {/* Referral List */}
       <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+        <View style={styles.referralCard}>
+          <Text style={styles.referralReason}>Saved referral queue ({referralActions.length})</Text>
+          <Text style={styles.headerSubtitle}>Saved locally is not server confirmation. Retry uses the same stored action ID, including after a timeout. This is an AsyncStorage outbox, not full offline database sync.</Text>
+          {queueError !== '' && <Text accessibilityRole="alert" style={styles.referralReason}>{queueError}</Text>}
+          {referralActions.map(action => (
+            <View key={action.id} style={styles.referralCard}>
+              <Text selectable style={styles.referralId}>{action.id}</Text>
+              <Text style={styles.referralReason}>Patient: {String(action.payload.patientId || 'Not specified')}</Text>
+              <Text style={styles.headerSubtitle}>{action.demo ? 'Demo/legacy action: delivery unverified; review manually.' : action.status === 'synced' ? 'Server confirmed' : action.status === 'syncing' ? 'Sending saved action; not yet confirmed' : action.status === 'error' ? 'Not confirmed. Retry the saved action, not a new referral.' : 'Saved locally; pending server confirmation'}</Text>
+              {action.error && <Text style={styles.referralReason}>{action.error}</Text>}
+            </View>
+          ))}
+          <TouchableOpacity style={styles.createButton} disabled={syncing} onPress={() => void retryQueue()}>
+            <Text style={styles.createButtonText}>{syncing ? 'Sending saved actions...' : 'Retry saved outbox'}</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerSubtitle}>Retries all eligible saved outbox actions, not just referrals. No new submission is created.</Text>
+        </View>
+        <Text style={styles.headerSubtitle}>Sample referral history below is illustrative, not server-confirmed patient data.</Text>
         {mockReferrals
           .filter((r) =>
             segment === 'active'

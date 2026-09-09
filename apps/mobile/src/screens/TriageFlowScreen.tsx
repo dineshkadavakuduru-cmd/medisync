@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,37 +7,36 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
-  Animated,
 } from 'react-native';
-import { COLORS, TriageSeverity, FacilityType } from '@medisync/shared';
+import { useNavigation, useRoute, NavigationProp, RouteProp } from '@react-navigation/native';
+import { COLORS, TriageSeverity } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { SeverityBadge } from '../components/SeverityBadge';
-import { api } from '../services/api';
-import { useApi } from '../hooks/useApi';
+import { api, ClinicalTriageResult, SymptomCategory, TriagePayload, VitalSigns } from '../services/api';
 import { useTranslation } from '../i18n';
 import { speak, stopSpeaking } from '../services/voiceService';
-import { isDemoActive } from '../services/demoMode';
 import { VoiceInputButton } from '../components/VoiceInputButton';
 import { getAllSymptoms } from '../services/triageService';
 import { getRecommendedDiagnostics } from '../services/triageService';
 import { syncService } from '../services/syncService';
-import { getActivePersona } from '../services/personas';
 
 type Step = 'select' | 'symptoms' | 'vitals' | 'result';
 
-interface SymptomCategory {
-  name: string;
-  icon: string;
-  symptoms: { id: string; label: string; labelHi: string; labelMr: string; system: string; weight: number; redFlag: boolean }[];
-}
+type TriageRoutes = {
+  TriageFlow: { patientId?: string; facilityId?: string } | undefined;
+  Diagnostics: { patientId: string; facilityId: string; triageId: string; symptoms: string[]; recommendedTests: string[] };
+  Referral: { patientId: string; facilityId: string };
+};
 
 export const TriageFlowScreen: React.FC = () => {
+  const navigation = useNavigation<NavigationProp<TriageRoutes>>();
+  const route = useRoute<RouteProp<TriageRoutes, 'TriageFlow'>>();
   const { t, language } = useTranslation();
   const [step, setStep] = useState<Step>('select');
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
   const [patientAge, setPatientAge] = useState('');
   const [patientGender, setPatientGender] = useState('');
-  const [patientId, setPatientId] = useState('');
+  const [patientId, setPatientId] = useState(route.params?.patientId || '');
+  const [facilityId, setFacilityId] = useState(route.params?.facilityId || '');
   const [vitals, setVitals] = useState({
     temperature: '',
     heartRate: '',
@@ -46,31 +45,50 @@ export const TriageFlowScreen: React.FC = () => {
     oxygenSaturation: '',
     respiratoryRate: '',
   });
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<ClinicalTriageResult | null>(null);
+  const [submittedContext, setSubmittedContext] = useState<TriagePayload | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [referralSaving, setReferralSaving] = useState(false);
+  const [referralQueued, setReferralQueued] = useState(false);
   const [loading, setLoading] = useState(false);
   const [symptomCategories, setSymptomCategories] = useState<SymptomCategory[]>([]);
   const [otherSymptom, setOtherSymptom] = useState('');
   const [analysisStep, setAnalysisStep] = useState(0);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const contextVersion = useRef(0);
+  const analyzeLock = useRef(false);
+  const referralLock = useRef(false);
 
   useEffect(() => {
+    let active = true;
     api.getSymptoms().then(res => {
-      if (res.data?.categories) setSymptomCategories(res.data.categories);
-    }).catch(() => {});
+      if (!res.success) throw new Error(res.error);
+      if (active) setSymptomCategories(res.data.categories);
+    }).catch(e => { if (active) setError(e instanceof Error ? e.message : 'Unable to load symptoms.'); });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    if (isDemoActive() && symptomCategories.length > 0) {
-      const redFlags = symptomCategories.flatMap(cat =>
-        cat.symptoms.filter(s => s.redFlag).map(s => s.id)
-      );
-      if (redFlags.length > 0) {
-        setSelectedSymptoms(redFlags.slice(0, 3));
-        setPatientAge('45');
-        setPatientGender('MALE');
-      }
-    }
-  }, [symptomCategories]);
+    setPatientId(route.params?.patientId || '');
+    setFacilityId(route.params?.facilityId || '');
+    setPatientAge('');
+    setPatientGender('');
+    setResult(null);
+    setSubmittedContext(null);
+    setSelectedSymptoms([]);
+    setReferralQueued(false);
+    setOtherSymptom('');
+    setVitals({ temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '' });
+    setLoading(false);
+    setReferralSaving(false);
+    setStep('select');
+    return () => {
+      contextVersion.current += 1;
+      analyzeLock.current = false;
+      referralLock.current = false;
+      stopSpeaking();
+    };
+  }, [route.params?.patientId, route.params?.facilityId]);
 
   const toggleSymptom = (symptomId: string) => {
     setSelectedSymptoms(prev =>
@@ -83,7 +101,43 @@ export const TriageFlowScreen: React.FC = () => {
   );
 
   const handleAnalyze = async () => {
+    if (analyzeLock.current) return;
+    setError(null);
+    const age = Number(patientAge);
+    const gender = patientGender.trim().toUpperCase();
+    if (!patientId.trim() || !patientAge.trim() || !Number.isInteger(age) || age < 0 || age > 120 || (gender !== 'MALE' && gender !== 'FEMALE' && gender !== 'OTHER') || !selectedSymptoms.length) {
+      setError('Enter a patient ID, valid age (0-120), gender (MALE/FEMALE/OTHER), and at least one symptom.');
+      return;
+    }
+    const vitalSigns: VitalSigns = {};
+    const bounds: Record<keyof VitalSigns, [number, number]> = {
+      temperature: [25, 45], heartRate: [20, 300], bloodPressureSystolic: [40, 300],
+      bloodPressureDiastolic: [20, 200], oxygenSaturation: [50, 100], respiratoryRate: [1, 100],
+    };
+    for (const key of Object.keys(bounds) as (keyof VitalSigns)[]) {
+      if (!vitals[key]) continue;
+      const value = Number(vitals[key]);
+      const [min, max] = bounds[key];
+      if (!Number.isFinite(value) || value < min || value > max) {
+        setError(`Enter a valid ${key} between ${min} and ${max}, or leave it blank.`);
+        return;
+      }
+      vitalSigns[key] = value;
+    }
+    const { bloodPressureSystolic: systolic, bloodPressureDiastolic: diastolic } = vitalSigns;
+    if ((systolic === undefined) !== (diastolic === undefined) || (systolic !== undefined && diastolic !== undefined && systolic <= diastolic)) {
+      setError('Provide both blood pressure values, with systolic greater than diastolic.');
+      return;
+    }
+    const body: TriagePayload = {
+      symptoms: [...selectedSymptoms], patientAge: age, patientGender: gender, patientId: patientId.trim(),
+      vitalSigns: Object.keys(vitalSigns).length ? vitalSigns : undefined,
+    };
+    const version = contextVersion.current;
+    analyzeLock.current = true;
     setLoading(true);
+    setResult(null);
+    setReferralQueued(false);
     setAnalysisStep(0);
     setStep('result');
 
@@ -96,87 +150,73 @@ export const TriageFlowScreen: React.FC = () => {
 
     for (let i = 0; i < steps.length; i++) {
       await new Promise(r => setTimeout(r, steps[i].delay));
+      if (version !== contextVersion.current) return;
       setAnalysisStep(i + 1);
     }
 
     try {
-      const body: any = {
-        symptoms: selectedSymptoms,
-        patientAge: parseInt(patientAge) || 30,
-        patientGender: patientGender || 'MALE',
-        patientId: patientId || 'patient-1',
-      };
-      if (vitals.temperature || vitals.heartRate || vitals.bloodPressureSystolic || vitals.oxygenSaturation || vitals.respiratoryRate) {
-        body.vitalSigns = {
-          temperature: vitals.temperature ? parseFloat(vitals.temperature) : undefined,
-          heartRate: vitals.heartRate ? parseInt(vitals.heartRate) : undefined,
-          bloodPressureSystolic: vitals.bloodPressureSystolic ? parseInt(vitals.bloodPressureSystolic) : undefined,
-          bloodPressureDiastolic: vitals.bloodPressureDiastolic ? parseInt(vitals.bloodPressureDiastolic) : undefined,
-          oxygenSaturation: vitals.oxygenSaturation ? parseInt(vitals.oxygenSaturation) : undefined,
-          respiratoryRate: vitals.respiratoryRate ? parseInt(vitals.respiratoryRate) : undefined,
-        };
-      }
       const response = await api.submitTriage(body);
+      if (version !== contextVersion.current) return;
+      if (!response.success || !response.data?.id) throw new Error(response.error || 'The server did not return a triage result.');
+      setSubmittedContext(body);
       setResult(response.data);
-
-      // Auto-create diagnostic order for RED/YELLOW severity
-      if (response.data && (response.data.severity === 'RED' || response.data.severity === 'YELLOW')) {
-        const recommendedTests = getRecommendedDiagnostics(selectedSymptoms);
-        if (recommendedTests.length > 0) {
-          const persona = getActivePersona();
-          const orderData = {
-            patientId: patientId || 'patient-1',
-            facilityId: 'facility-1',
-            triageId: response.data.id,
-            tests: recommendedTests,
-            priority: response.data.severity === 'RED' ? 'STAT' : 'URGENT',
-            orderedBy: persona.name,
-            notes: `Auto-generated from triage ${response.data.id}`,
-          };
-
-          if (syncService.isOnline()) {
-            try {
-              await api.createDiagnosticsOrder(orderData);
-            } catch (e) {
-              console.error('Failed to create diagnostic order:', e);
-            }
-          } else {
-            await syncService.enqueue({
-              type: 'CREATE_DIAGNOSTIC_ORDER',
-              payload: orderData,
-              timestamp: Date.now(),
-            });
-          }
-        }
-      }
     } catch (e) {
-      console.error(e);
+      if (version !== contextVersion.current) return;
+      setError(e instanceof Error ? e.message : 'Triage failed. No result was confirmed.');
+      setStep('vitals');
     } finally {
-      setLoading(false);
+      if (version === contextVersion.current) { setLoading(false); analyzeLock.current = false; }
     }
   };
 
   const handleCreateReferral = async () => {
+    if (referralLock.current || referralQueued) return;
+    setError(null);
+    if (!submittedContext || !facilityId.trim()) {
+      setError('A completed triage and originating facility ID are required.');
+      return;
+    }
+    const version = contextVersion.current;
+    referralLock.current = true;
+    setReferralSaving(true);
     try {
-      const vitalSignsBody: any = {};
-      if (vitals.temperature) vitalSignsBody.temperature = parseFloat(vitals.temperature);
-      if (vitals.heartRate) vitalSignsBody.heartRate = parseInt(vitals.heartRate);
-      if (vitals.bloodPressureSystolic) vitalSignsBody.bloodPressureSystolic = parseInt(vitals.bloodPressureSystolic);
-      if (vitals.bloodPressureDiastolic) vitalSignsBody.bloodPressureDiastolic = parseInt(vitals.bloodPressureDiastolic);
-      if (vitals.oxygenSaturation) vitalSignsBody.oxygenSaturation = parseInt(vitals.oxygenSaturation);
-      if (vitals.respiratoryRate) vitalSignsBody.respiratoryRate = parseInt(vitals.respiratoryRate);
+      await syncService.enqueue({
+        type: 'CREATE_REFERRAL',
+        payload: {
+          ...submittedContext,
+          fromFacilityId: facilityId.trim(),
+          reason: submittedContext.symptoms.join(', '),
+        },
+        timestamp: Date.now(),
+      });
+      if (version !== contextVersion.current) return;
+      // enqueue confirms local persistence only. Retries must reuse the stored action ID.
+      setReferralQueued(true);
+    } catch (e) {
+      if (version !== contextVersion.current) return;
+      referralLock.current = false;
+      setError(e instanceof Error ? `Unable to save referral locally: ${e.message}` : 'Unable to save referral locally. Please retry.');
+    } finally {
+      if (version === contextVersion.current) setReferralSaving(false);
+    }
+  };
 
-      await api.createReferral({
-        patientId: patientId || 'patient-1',
-        fromFacilityId: 'facility-1',
-        symptoms: selectedSymptoms,
-        patientAge: parseInt(patientAge) || 30,
-        patientGender: patientGender || 'MALE',
-        vitalSigns: Object.keys(vitalSignsBody).length > 0 ? vitalSignsBody : undefined,
-        reason: selectedSymptoms.join(', '),
+  const handleReviewDiagnostics = () => {
+    setError(null);
+    if (!result || !submittedContext || !facilityId.trim()) {
+      setError('Patient, facility, and completed triage context are required for clinician review.');
+      return;
+    }
+    try {
+      navigation.navigate('Diagnostics', {
+        patientId: submittedContext.patientId,
+        facilityId: facilityId.trim(),
+        triageId: result.id,
+        symptoms: submittedContext.symptoms,
+        recommendedTests: result.recommendedDiagnostics ?? getRecommendedDiagnostics(submittedContext.symptoms),
       });
     } catch (e) {
-      console.error(e);
+      setError(e instanceof Error ? e.message : 'Unable to open diagnostic review.');
     }
   };
 
@@ -208,14 +248,14 @@ export const TriageFlowScreen: React.FC = () => {
       <Text style={styles.stepTitle}>{t('triage.selectPatient')}</Text>
       <TextInput
         style={styles.input}
-        placeholder="Patient ID or ABHA (optional)"
+        placeholder="Patient ID (required)"
         value={patientId}
         onChangeText={setPatientId}
         placeholderTextColor={COLORS.textSecondary}
       />
       <TextInput
         style={styles.input}
-        placeholder={t('triage.selectPatient')}
+        placeholder="Patient age (0-120)"
         value={patientAge}
         onChangeText={setPatientAge}
         keyboardType="numeric"
@@ -228,8 +268,15 @@ export const TriageFlowScreen: React.FC = () => {
         onChangeText={setPatientGender}
         placeholderTextColor={COLORS.textSecondary}
       />
+      <TextInput
+        style={styles.input}
+        placeholder="Originating facility ID (required for referral or diagnostics)"
+        value={facilityId}
+        onChangeText={setFacilityId}
+        placeholderTextColor={COLORS.textSecondary}
+      />
       <TouchableOpacity style={styles.nextButton} onPress={() => setStep('symptoms')}>
-        <Text style={styles.nextButtonText}>{t('common.back')}</Text>
+        <Text style={styles.nextButtonText}>Continue</Text>
       </TouchableOpacity>
     </View>
   );
@@ -334,9 +381,7 @@ export const TriageFlowScreen: React.FC = () => {
                 placeholder={field.placeholder}
                 value={vitals[field.key as keyof typeof vitals] as string}
                 onChangeText={(text) => {
-                  const num = parseInt(text) || 0;
-                  if (num >= field.min && num <= field.max) setVitals({ ...vitals, [field.key]: text });
-                  else if (text === '') setVitals({ ...vitals, [field.key]: '' });
+                  if (/^\d*\.?\d*$/.test(text)) setVitals({ ...vitals, [field.key]: text });
                 }}
                 keyboardType="numeric"
                 placeholderTextColor={COLORS.textSecondary}
@@ -396,7 +441,7 @@ export const TriageFlowScreen: React.FC = () => {
           <View style={styles.confidenceContainer}>
             <Text style={styles.confidenceLabel}>{t('triage.confidence')}</Text>
             <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${result.confidence}%`, backgroundColor: severityConfig.color }]} />
+              <View style={[styles.progressFill, { width: `${Math.max(0, Math.min(100, result.confidence * 100))}%`, backgroundColor: severityConfig.color }]} />
             </View>
             <Text style={styles.confidenceValue}>{Math.round(result.confidence * 100)}%</Text>
           </View>
@@ -424,17 +469,31 @@ export const TriageFlowScreen: React.FC = () => {
           </View>
         </View>
 
+        <Text style={styles.subtitle}>Patient: {submittedContext?.patientId} | Facility: {facilityId || 'Not selected'}</Text>
+        <TouchableOpacity style={styles.nextButton} onPress={handleReviewDiagnostics}>
+          <Text style={styles.nextButtonText}>Clinician review of diagnostic tests</Text>
+        </TouchableOpacity>
+        <Text style={styles.vitalHint}>Recommendations require clinician review before an order is submitted.</Text>
+        {referralQueued && submittedContext && (
+          <View>
+            <Text accessibilityRole="alert" style={styles.vitalHint}>Referral saved on this device, pending server confirmation. Check the referral queue for delivery status and retry the saved action there; do not create it again.</Text>
+            <TouchableOpacity style={styles.newTriageButton} onPress={() => navigation.navigate('Referral', { patientId: submittedContext.patientId, facilityId: facilityId.trim() })}>
+              <Text style={styles.newTriageButtonText}>View referral queue</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {result.needsReferral && (
           <TouchableOpacity
             style={[styles.referralButton, result.severity === TriageSeverity.RED && styles.referralButtonRed]}
             onPress={handleCreateReferral}
+            disabled={referralSaving || referralQueued}
           >
             <Text style={styles.referralButtonText}>
-              {result.severity === TriageSeverity.RED ? `🚑 ${t('triage.createEmergencyReferral')}` : `📋 ${t('triage.createReferral')}`}
+              {referralQueued ? 'Referral saved in queue' : referralSaving ? 'Saving referral locally...' : result.severity === TriageSeverity.RED ? `🚑 ${t('triage.createEmergencyReferral')}` : `📋 ${t('triage.createReferral')}`}
             </Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.newTriageButton} onPress={() => { setStep('select'); setResult(null); setSelectedSymptoms([]); setOtherSymptom(''); }}>
+        <TouchableOpacity style={styles.newTriageButton} disabled={referralSaving} onPress={() => { referralLock.current = false; setStep('select'); setResult(null); setSubmittedContext(null); setReferralQueued(false); setError(null); setSelectedSymptoms([]); setOtherSymptom(''); setVitals({ temperature: '', heartRate: '', bloodPressureSystolic: '', bloodPressureDiastolic: '', oxygenSaturation: '', respiratoryRate: '' }); }}>
           <Text style={styles.newTriageButtonText}>🔄 {t('triage.newTriage')}</Text>
         </TouchableOpacity>
       </View>
@@ -444,6 +503,7 @@ export const TriageFlowScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
+        {error && <Text accessibilityRole="alert" style={styles.flagText}>{error}</Text>}
         {step === 'select' && renderStepSelect()}
         {step === 'symptoms' && renderStepSymptoms()}
         {step === 'vitals' && renderStepVitals()}

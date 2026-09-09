@@ -1,4 +1,8 @@
-import { broadcast } from '../websocket/realtime.js';
+import { fileURLToPath, URL } from 'node:url';
+import { randomUUID } from 'node:crypto';
+import { FileStore } from '../database/fileStore.js';
+import { ApiError } from '../validation.js';
+import type { AshaVisit } from './fieldWorkflows.js';
 
 export type MedicineStatus = 'ADEQUATE' | 'LOW' | 'CRITICAL' | 'OUT_OF_STOCK';
 export type MedicineCategory =
@@ -43,7 +47,7 @@ const ESSENTIAL_MEDICINES = [
   { name: 'Oral Contraceptive Pills', category: 'essential' as MedicineCategory, unit: 'strips', minThreshold: 50, maxCapacity: 300 },
 ];
 
-function computeStatus(currentStock: number, minThreshold: number): MedicineStatus {
+export function computeStatus(currentStock: number, minThreshold: number): MedicineStatus {
   if (currentStock === 0) return 'OUT_OF_STOCK';
   if (currentStock <= minThreshold * 0.5) return 'CRITICAL';
   if (currentStock <= minThreshold) return 'LOW';
@@ -55,6 +59,8 @@ function generateId(): string {
 }
 
 export function generateFacilityInventory(facilityId: string, facilityType: string): MedicineItem[] {
+  // Existing startup callers must not silently create synthetic stock in the live store.
+  if (process.env.FIELD_WORKFLOWS_DEMO !== 'true') return [];
   const type = facilityType.toUpperCase();
   let medicines = ESSENTIAL_MEDICINES;
 
@@ -85,41 +91,70 @@ export function generateFacilityInventory(facilityId: string, facilityType: stri
   });
 }
 
-const inventoryStore: Map<string, MedicineItem[]> = new Map();
+export const orderStatuses = ['PO', 'APPROVED', 'ORDERED', 'RECEIVED', 'VERIFIED', 'STOCKED'] as const;
+export type OrderStatus = typeof orderStatuses[number];
+export interface InventoryOrder {
+  id: string; facilityId: string; medicineId: string; quantity: number; status: OrderStatus;
+  history: { status: OrderStatus; timestamp: string; staffId: string }[];
+}
+export interface InventoryLog {
+  id: string; medicineId: string; kind: 'seed' | 'physical_count' | 'dispense' | 'stock_order';
+  quantity: number; before: number; after: number; timestamp: string; recordedAt: string; staffId: string;
+  orderId?: string;
+}
+export interface FieldRecord {
+  id: string; stocks: MedicineItem[]; log: InventoryLog[]; orders: InventoryOrder[]; visits: AshaVisit[];
+  receipt?: { id: string; type: string; entityId: string };
+}
+export const emptyFieldRecord = (id: string): FieldRecord => ({ id, stocks: [], log: [], orders: [], visits: [] });
+export const fieldStore = new FileStore<FieldRecord>(process.env.FIELD_WORKFLOWS_STORE_PATH ||
+  fileURLToPath(new URL(`../../data/field-workflows${process.env.FIELD_WORKFLOWS_DEMO === 'true' ? '-demo' : ''}.json`, import.meta.url)));
 
 export function getInventory(facilityId: string): MedicineItem[] {
-  return inventoryStore.get(facilityId) || [];
+  return fieldStore.get(`inventory:${facilityId}`)?.stocks || [];
 }
 
-export function setInventory(facilityId: string, items: MedicineItem[]) {
-  inventoryStore.set(facilityId, items);
+// Explicit manual initial catalogue import. Never replace existing counts or history on restart.
+export function setInventory(facilityId: string, items: MedicineItem[], store = fieldStore) {
+  if (!items.length) return;
+  if (store.get(`inventory:${facilityId}`)) return;
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(facilityId) || new Set(items.map(item => item.id)).size !== items.length ||
+      items.some(item => item.facilityId !== facilityId || !/^[A-Za-z0-9_-]{1,100}$/.test(item.id) || !item.name ||
+        !Number.isSafeInteger(item.currentStock) || item.currentStock < 0 ||
+        !Number.isSafeInteger(item.maxCapacity) || item.maxCapacity < item.currentStock ||
+        !Number.isSafeInteger(item.minThreshold) || item.minThreshold < 0 || item.minThreshold > item.maxCapacity)) {
+    throw new ApiError(400, 'Invalid inventory catalogue');
+  }
+  const now = new Date().toISOString();
+  const record = emptyFieldRecord(`inventory:${facilityId}`);
+  record.stocks = items.map(item => ({ ...item, status: computeStatus(item.currentStock, item.minThreshold) }));
+  record.log = items.map(item => ({ id: randomUUID(), medicineId: item.id, kind: 'seed', quantity: item.currentStock,
+    before: 0, after: item.currentStock, timestamp: now, recordedAt: now, staffId: 'manual-seed' }));
+  store.save(record);
 }
 
 export function updateStock(facilityId: string, medicineId: string, newStock: number): MedicineItem | null {
-  const items = inventoryStore.get(facilityId);
-  if (!items) return null;
-  const item = items.find((i) => i.id === medicineId);
-  if (!item) return null;
-
-  const prevStatus = item.status;
-  item.currentStock = Math.max(0, Math.min(newStock, item.maxCapacity));
-  item.status = computeStatus(item.currentStock, item.minThreshold);
-  item.lastRestocked = new Date().toISOString();
-
-  if (item.status === 'CRITICAL' || item.status === 'OUT_OF_STOCK') {
-    broadcast({
-      type: 'MEDICINE_UPDATE',
-      facilityId,
-      data: { medicineId: item.id, name: item.name, status: item.status, currentStock: item.currentStock, minThreshold: item.minThreshold },
-      timestamp: new Date().toISOString(),
-    });
+  if (process.env.ENABLE_SIMULATOR === 'true' && process.env.FIELD_WORKFLOWS_DEMO !== 'true') {
+    return null;
   }
-
+  const record = fieldStore.get(`inventory:${facilityId}`);
+  if (!record) return null;
+  const item = record.stocks.find((i) => i.id === medicineId);
+  if (!item) return null;
+  if (!Number.isSafeInteger(newStock) || newStock < 0 || newStock > item.maxCapacity) throw new ApiError(400, 'Stock must be an integer within capacity');
+  const before = item.currentStock;
+  item.currentStock = newStock;
+  item.status = computeStatus(item.currentStock, item.minThreshold);
+  const now = new Date().toISOString();
+  if (newStock > before) item.lastRestocked = now;
+  record.log.push({ id: randomUUID(), medicineId, kind: 'physical_count', quantity: newStock, before,
+    after: newStock, timestamp: now, recordedAt: now, staffId: 'legacy-inventory-api' });
+  fieldStore.save(record);
   return item;
 }
 
 export function calculateFacilityMedicineAvailability(facilityId: string): number {
-  const items = inventoryStore.get(facilityId);
+  const items = getInventory(facilityId);
   if (!items || items.length === 0) return 0;
   const adequate = items.filter((i) => i.status === 'ADEQUATE').length;
   return Math.round((adequate / items.length) * 100);

@@ -1,5 +1,5 @@
 import { FastifyPluginAsync } from 'fastify';
-import { ApiResponse, DashboardStats, FacilitiesAnalytics, FacilitySummary, OutbreakAlert, DistrictTrends, FacilityPerformance, PatientFeedback, FeedbackSummary } from '../types/index.js';
+import { ApiResponse, DashboardStats, FacilitiesAnalytics, OutbreakAlert, DistrictTrends, FacilityPerformance, PatientFeedback, FeedbackSummary } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
 import { calculateFacilityMedicineAvailability } from '../services/inventoryService.js';
 import { getStaff } from '../services/staffService.js';

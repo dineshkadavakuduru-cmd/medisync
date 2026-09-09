@@ -1,6 +1,8 @@
 import { FastifyPluginAsync } from 'fastify';
 import { TeleconsultSession, TeleconsultStatus, Doctor, ApiResponse, DoctorAvailability, Prescription, PrescriptionMedication } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
+import { z } from 'zod';
+import { emptyQuery, idSchema, text, validationErrors } from '../validation.js';
 import {
   createSession,
   getSession,
@@ -11,7 +13,6 @@ import {
   getDoctors,
   getDoctorById,
   getDoctorsByFacility,
-  seedDemoSessions,
   getDoctorAvailability,
   getAvailableSlotsForDoctor,
   createPrescription,
@@ -19,8 +20,7 @@ import {
 } from '../services/teleconsultService.js';
 
 const teleconsultRoutes: FastifyPluginAsync = async (fastify) => {
-  seedDemoSessions();
-
+  validationErrors(fastify);
   fastify.get<{ Reply: ApiResponse<TeleconsultSession[]> }>('/api/teleconsult/sessions', async (request) => {
     const query = request.query as { doctorId?: string; facilityId?: string };
 
@@ -167,18 +167,24 @@ const teleconsultRoutes: FastifyPluginAsync = async (fastify) => {
     };
     Reply: ApiResponse<Prescription>;
   }>('/api/teleconsult/prescriptions', {
+    bodyLimit: 16384,
     schema: { body: {
       type: 'object', additionalProperties: false, required: ['sessionId', 'patientId', 'doctorId', 'medications'],
       properties: {
-        sessionId: { type: 'string' },
-        patientId: { type: 'string' },
-        doctorId: { type: 'string' },
-        medications: { type: 'array', minItems: 1, items: { type: 'object', required: ['name', 'dosage', 'frequency', 'duration'], properties: { name: { type: 'string' }, dosage: { type: 'string' }, frequency: { type: 'string' }, duration: { type: 'string' }, instructions: { type: 'string' } } } },
+        sessionId: { type: 'string', minLength: 1, maxLength: 100 },
+        patientId: { type: 'string', minLength: 1, maxLength: 100 },
+        doctorId: { type: 'string', minLength: 1, maxLength: 100 },
+        medications: { type: 'array', minItems: 1, maxItems: 20, items: { type: 'object', additionalProperties: false, required: ['name', 'dosage', 'frequency', 'duration'], properties: { name: { type: 'string', minLength: 1, maxLength: 160 }, dosage: { type: 'string', minLength: 1, maxLength: 160 }, frequency: { type: 'string', minLength: 1, maxLength: 160 }, duration: { type: 'string', minLength: 1, maxLength: 160 }, instructions: { type: 'string', minLength: 1, maxLength: 500 } } } },
         notes: { type: 'string', maxLength: 500 },
       },
     } },
   }, async (request, reply) => {
-    const body = request.body as { sessionId: string; patientId: string; doctorId: string; medications: PrescriptionMedication[]; notes?: string };
+    emptyQuery.parse(request.query);
+    const body = z.object({
+      sessionId: idSchema, patientId: idSchema, doctorId: idSchema,
+      medications: z.array(z.object({ name: text(160), dosage: text(160), frequency: text(160), duration: text(160), instructions: text(500).optional() }).strict()).min(1).max(20),
+      notes: text(500).optional(),
+    }).strict().parse(request.body);
     try {
       const prescription = createPrescription(body);
       return reply.code(201).send({ success: true, data: prescription });

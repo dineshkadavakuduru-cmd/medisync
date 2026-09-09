@@ -1,14 +1,20 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { createVitalsService, VitalsError } from '../services/vitalsService.js';
+import { z } from 'zod';
+import { emptyQuery, idParams, validationErrors } from '../validation.js';
 
 // Main integration: await fastify.register(vitalsRoutes), after auth hooks.
 const vitalsRoutes: FastifyPluginAsync = async fastify => {
+  validationErrors(fastify);
   const configured = process.env.VITALS_MODE || 'demo';
   if (configured !== 'demo' && configured !== 'measured') throw new Error('VITALS_MODE must be demo or measured');
   const service = createVitalsService({ mode: configured, databaseUrl: process.env.DATABASE_URL });
   fastify.addHook('onClose', async () => service.close());
   await service.init();
   fastify.post<{ Params: { id: string }; Body: unknown }>('/api/emergencies/:id/vitals', { bodyLimit: 2048 }, async (request, reply) => {
+    idParams.parse(request.params);
+    emptyQuery.parse(request.query);
+    z.enum(['true', 'false']).optional().parse(request.headers['x-demo-mode']);
     try {
       const data = await service.append(request.params.id, request.body, request.headers['x-demo-mode'] === 'true');
       return reply.code(201).send({ success: true, data, mode: service.mode });
@@ -19,6 +25,9 @@ const vitalsRoutes: FastifyPluginAsync = async fastify => {
     }
   });
   fastify.get<{ Params: { id: string }; Querystring: { limit?: string } }>('/api/emergencies/:id/vitals', async (request, reply) => {
+    idParams.parse(request.params);
+    z.object({ limit: z.string().regex(/^(?:[1-9]|[1-9][0-9]|1[01][0-9]|120)$/).optional() }).strict().parse(request.query);
+    z.enum(['true', 'false']).optional().parse(request.headers['x-demo-mode']);
     try {
       const limit = request.query.limit === undefined ? 120 : Number(request.query.limit);
       const data = await service.history(request.params.id, limit, request.headers['x-demo-mode'] === 'true');

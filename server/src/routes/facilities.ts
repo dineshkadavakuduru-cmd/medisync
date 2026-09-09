@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from 'fastify';
 import { Facility, FacilityType, ApiResponse, MedicineItem, StaffMember, FacilitySummary } from '../types/index.js';
 import { getInventory, setInventory, generateFacilityInventory, updateStock, calculateFacilityMedicineAvailability } from '../services/inventoryService.js';
-import { getStaff, setStaff, generateFacilityStaff, toggleDuty } from '../services/staffService.js';
+import { getStaff, setStaff, generateFacilityStaff } from '../services/staffService.js';
 import { broadcast } from '../websocket/realtime.js';
 
 const facilitiesRoutes: FastifyPluginAsync = async (fastify) => {
@@ -246,8 +246,6 @@ const facilitiesRoutes: FastifyPluginAsync = async (fastify) => {
 
     const inventory = getInventory(id);
     const staff = getStaff(id);
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const recentReferralsIn = Math.floor(Math.random() * 5);
     const recentReferralsOut = Math.floor(Math.random() * 3);
 

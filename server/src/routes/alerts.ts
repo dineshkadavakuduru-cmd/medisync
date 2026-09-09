@@ -55,7 +55,7 @@ const alertsRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post<{ Body: Omit<Alert, 'id' | 'createdAt'>; Reply: ApiResponse<Alert> }>(
     '/api/alerts',
-    async (request, reply) => {
+    async (request) => {
       const body = request.body as Omit<Alert, 'id' | 'createdAt'>;
       const newAlert: Alert = {
         ...body,

@@ -1,8 +1,5 @@
 import { OutbreakAlert } from '../types/index.js';
 
-const CONDITIONS_TO_MONITOR = ['malaria', 'dengue', 'typhoid', 'diarrhea', 'tuberculosis', 'covid_like', 'chikungunya', 'leptospirosis'];
-const REGIONS = ['Mulshi', 'Velhe', 'Junnar', 'Ambegaon', 'Bhor', 'Khed', 'Maval', 'Haveli'];
-
 const RECOMMENDATIONS: Record<string, Record<string, string>> = {
   OUTBREAK: {
     dengue: 'Activate district-wide dengue response protocol. Deploy fogging teams to affected taluka. Increase ORS and IV fluid stock at nearby Sub-Centres. Issue community awareness advisory.',

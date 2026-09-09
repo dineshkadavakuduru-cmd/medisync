@@ -1,7 +1,7 @@
 // Feature-local copy for QueueScreen
 export const queueScreenCopy = {
   title: 'Facility Queue',
-  subtitle: 'Live patient queue management',
+  subtitle: 'Backend queue snapshot, refreshed every 15 seconds',
   inQueue: 'In Queue',
   critical: 'Critical',
   maxWait: 'Max Wait',
@@ -11,4 +11,14 @@ export const queueScreenCopy = {
   position: 'Position: {pos}',
   estCallTime: 'Est. call: {time}',
   tokenLabel: 'Token',
+  notConnected: 'Not connected. Configure EXPO_PUBLIC_API_URL with the backend origin. Queue status is unknown.',
+  backendNotice: 'The project API uses seeded, in-memory demo records. Wait times are backend estimates, not guaranteed call times.',
+  languageGap: 'The queue is currently available in English only; your language preference is preserved.',
+  facilityId: 'Facility ID', facilityPlaceholder: 'Enter the facility record ID',
+  chooseFacility: 'Enter a facility ID to load its queue.',
+  loading: 'Loading queue...', retry: 'Refresh queue', error: 'Unable to load queue. Status is unknown.',
+  invalidResponse: 'Invalid queue response. Status is unknown.',
+  unknownToken: 'Not supplied', urgent: 'Urgent', routine: 'Routine',
+  stale: 'Refresh failed. Showing the last successful snapshot, not live data.',
+  updated: 'Snapshot time:',
 };

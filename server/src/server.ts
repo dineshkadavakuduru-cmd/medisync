@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import websocket from '@fastify/websocket';
 import authRoutes from './routes/auth.js';
 import patientsRoutes from './routes/patients.js';
+import fieldWorkflowsRoutes from './routes/fieldWorkflows.js';
 import facilitiesRoutes from './routes/facilities.js';
 import triageRoutes from './routes/triage.js';
 import referralsRoutes from './routes/referrals.js';
@@ -15,12 +16,11 @@ import diagnosticsRoutes from './routes/diagnostics.js';
 import fhirRoutes from './routes/fhir.js';
 import { registerWebSocket } from './websocket/realtime.js';
 import { startSimulator } from './services/simulator.js';
+import vitalsRoutes from './routes/vitals.js';
+import { pathToFileURL } from 'node:url';
 
-const fastify = Fastify({
-  logger: true,
-});
-
-async function start() {
+export async function buildServer(logger = false) {
+  const fastify = Fastify({ logger, ajv: { customOptions: { removeAdditional: false, coerceTypes: false } } });
   try {
     await fastify.register(cors, {
       origin: true,
@@ -31,6 +31,7 @@ async function start() {
 
     await fastify.register(authRoutes);
     await fastify.register(patientsRoutes);
+    await fastify.register(fieldWorkflowsRoutes);
     await fastify.register(facilitiesRoutes);
     await fastify.register(triageRoutes);
     await fastify.register(referralsRoutes);
@@ -41,37 +42,47 @@ async function start() {
     await fastify.register(appointmentsRoutes);
     await fastify.register(diagnosticsRoutes);
     await fastify.register(fhirRoutes);
+    await fastify.register(vitalsRoutes);
 
     fastify.get('/', async () => {
       return {
         status: 'ok',
         name: 'MediSync API',
         version: '1.0.0',
+        mode: 'demo',
+        authentication: 'unconfigured',
+        abdm: 'unconfigured',
+        externalNotifications: 'unconfigured',
       };
     });
 
-    const port = parseInt(process.env.PORT || '3001', 10);
-
-    await fastify.listen({ port, host: '0.0.0.0' });
-
-    console.log(`MediSync API server running on port ${port}`);
-    startSimulator();
+    await fastify.ready();
+    return fastify;
   } catch (err) {
-    fastify.log.error(err);
-    process.exit(1);
+    await fastify.close();
+    throw err;
   }
 }
 
-const gracefulShutdown = async () => {
+async function start() {
+  const port = Number(process.env.PORT || '3001');
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT must be an integer from 0 to 65535');
+  const fastify = await buildServer(true);
   try {
+    await fastify.listen({ port, host: process.env.HOST || '0.0.0.0' });
+    startSimulator();
+  } catch (error) {
     await fastify.close();
-    process.exit(0);
-  } catch (err) {
-    process.exit(1);
+    throw error;
   }
-};
+  const gracefulShutdown = async () => {
+    try { await fastify.close(); process.exit(0); }
+    catch { process.exit(1); }
+  };
+  process.on('SIGINT', gracefulShutdown);
+  process.on('SIGTERM', gracefulShutdown);
+}
 
-process.on('SIGINT', gracefulShutdown);
-process.on('SIGTERM', gracefulShutdown);
-
-start();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  start().catch(error => { console.error(error); process.exitCode = 1; });
+}

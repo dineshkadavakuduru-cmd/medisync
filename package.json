@@ -13,13 +13,18 @@
     "dev:server": "npm run dev --workspace=server",
     "install:all": "npm install",
     "build:all": "npm run build --workspaces",
+    "lint": "npm run lint --workspace=apps/mobile --workspace=server",
     "lint:all": "npm run lint --workspaces",
     "test:all": "npm run test --workspaces",
     "build": "npm run build --workspace=apps/mobile"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^4.6.2",
     "expo": "~51.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "~5.5.4"
   },
   "engines": {
     "node": ">=20.0.0"

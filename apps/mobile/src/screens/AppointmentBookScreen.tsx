@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,11 @@ import {
   TouchableOpacity,
   TextInput,
   Modal,
-  Alert,
 } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { useTranslation } from '../i18n';
-import { api } from '../services/api';
-import { useApi } from '../hooks/useApi';
+import { configuredApiRequest } from '../services/teleconsultClient';
 import { appointmentBookCopy as copy } from '../i18n/translations/appointmentBook';
 
 interface Doctor {
@@ -24,20 +22,11 @@ interface Doctor {
   facilityId: string;
 }
 
-interface TimeSlot {
-  time: string;
-  available: boolean;
-  doctorId: string;
-}
-
-interface DaySchedule {
-  date: string;
-  dayName: string;
-  slots: TimeSlot[];
-}
-
-export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
-  const { t } = useTranslation();
+export const AppointmentBookScreen: React.FC<{ navigation: any; route?: any }> = ({ navigation, route }) => {
+  const { language } = useTranslation();
+  const connected = !!process.env.EXPO_PUBLIC_API_URL?.trim();
+  const facilityId = typeof route?.params?.facilityId === 'string' ? route.params.facilityId.trim() : '';
+  const [patientId, setPatientId] = useState(typeof route?.params?.patientId === 'string' ? route.params.patientId : '');
   const [patientName, setPatientName] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
@@ -45,101 +34,138 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
   const [appointmentType, setAppointmentType] = useState('OUTPATIENT');
   const [priority, setPriority] = useState<'GREEN' | 'YELLOW' | 'RED'>('GREEN');
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedDateForSlots, setSelectedDateForSlots] = useState('');
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  const { data: doctorsData, refetch: refetchDoctors } = useApi(() => api.getFacilities?.() || Promise.resolve({ success: true, data: [] }));
-
-  useEffect(() => {
-    if (doctorsData?.success && doctorsData.data) {
-      const facilityDoctors = doctorsData.data
-        .filter((f: any) => f.specialists && f.specialists.length > 0)
-        .flatMap((f: any) => f.specialists.map((spec: string, idx: number) => ({
-          id: `doc-${f.id}-${idx}`,
-          name: `Dr. ${spec}`,
-          specialty: spec,
-          facilityId: f.id,
-        })));
-      setDoctors(facilityDoctors);
-    }
-  }, [doctorsData]);
+  const [doctorsError, setDoctorsError] = useState('');
+  const [slotsError, setSlotsError] = useState('');
+  const [doctorsLoading, setDoctorsLoading] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+  const [doctorRetry, setDoctorRetry] = useState(0);
+  const [slotRetry, setSlotRetry] = useState(0);
+  const [bookingId, setBookingId] = useState('');
+  const [bookingUncertain, setBookingUncertain] = useState(false);
+  const bookLock = useRef(false);
+  const alive = useRef(false);
+  const slotVersion = useRef(0);
 
   useEffect(() => {
-    if (selectedDateForSlots && selectedDoctor) {
-      loadAvailableSlots(selectedDoctor, selectedDateForSlots);
-    }
-  }, [selectedDateForSlots, selectedDoctor]);
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
 
-  const loadAvailableSlots = async (doctorId: string, date: string) => {
-    try {
-      // In real app, call API
-      // const res = await api.getAppointmentSlots(doctorId, date);
-      // For demo, generate mock slots
-      const baseSlots = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
-      const booked = ['10:00', '11:00', '14:00']; // Mock booked slots
-      const slots = baseSlots
-        .filter(s => !booked.includes(s))
-        .map(time => ({ time, available: true, doctorId }));
-      setAvailableSlots(slots.map(s => s.time));
-    } catch (e) {
-      console.error(e);
+  useEffect(() => {
+    let cancelled = false;
+    setDoctors([]);
+    setSelectedDoctor('');
+    setSelectedTime('');
+    setAvailableSlots([]);
+    setDoctorsError('');
+    if (!connected) return;
+    setDoctorsLoading(true);
+    configuredApiRequest('/teleconsult/doctors').then(data => {
+      if (!Array.isArray(data) || data.some(d => !d || typeof d.id !== 'string' || !d.id.trim() ||
+          typeof d.name !== 'string' || !d.name.trim() || typeof d.facilityId !== 'string' || !d.facilityId.trim() ||
+          typeof d.specialty !== 'string') || new Set(data.map(d => d.id)).size !== data.length) {
+        throw new Error(copy.invalidDoctors);
+      }
+      if (!cancelled) setDoctors((data as Doctor[]).filter(d => !facilityId || d.facilityId === facilityId));
+    }).catch(e => { if (!cancelled) setDoctorsError(e instanceof Error ? e.message : copy.invalidDoctors); })
+      .finally(() => { if (!cancelled) setDoctorsLoading(false); });
+    return () => { cancelled = true; };
+  }, [connected, facilityId, doctorRetry]);
+
+  useEffect(() => {
+    const version = ++slotVersion.current;
+    setSelectedTime('');
+    setAvailableSlots([]);
+    setSlotsError('');
+    setSlotsLoading(false);
+    const doctor = doctors.find(d => d.id === selectedDoctor);
+    if (!connected || !doctor || !selectedDate) return;
+    setSlotsLoading(true);
+    loadAvailableSlots(doctor, selectedDate).then(slots => {
+      if (version === slotVersion.current) setAvailableSlots(slots);
+    }).catch(e => {
+      if (version === slotVersion.current) setSlotsError(e instanceof Error ? e.message : copy.invalidSlots);
+    }).finally(() => { if (version === slotVersion.current) setSlotsLoading(false); });
+    return () => { slotVersion.current += 1; };
+  }, [connected, selectedDate, selectedDoctor, doctors, slotRetry]);
+
+  const loadAvailableSlots = async (doctor: Doctor, date: string): Promise<string[]> => {
+    const data = await configuredApiRequest(`/appointments/slots/${encodeURIComponent(doctor.facilityId)}/${encodeURIComponent(date)}?doctorId=${encodeURIComponent(doctor.id)}`);
+    const slots = (data as { slots?: unknown } | null)?.slots;
+    if (!Array.isArray(slots) || slots.some(s => typeof s !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s))) {
+      throw new Error(copy.invalidSlots);
     }
+    return [...new Set(slots as string[])].filter(s => new Date(`${date}T${s}:00`).getTime() > Date.now()).sort();
   };
 
   const handleBook = async () => {
-    if (!patientName || !selectedDoctor || !selectedDate || !selectedTime) {
-      Alert.alert(copy.error, copy.fillAllFields);
+    if (bookLock.current || bookingId || bookingUncertain) return;
+    if (!connected) { setError(copy.notConnected); return; }
+    const doctor = doctors.find(d => d.id === selectedDoctor);
+    if (!patientId.trim() || !patientName.trim() || !doctor || !selectedDate || !selectedTime) {
+      setError(copy.fillAllFields);
       return;
     }
-
+    if (slotsLoading || slotsError || !availableSlots.includes(selectedTime) || new Date(`${selectedDate}T${selectedTime}:00`).getTime() <= Date.now()) {
+      setError(copy.selectFuture); return;
+    }
+    bookLock.current = true;
     setLoading(true);
     setError('');
-
-    const dateTime = new Date(`${selectedDate}T${selectedTime}:00`);
+    let submitted = false;
     try {
-      // In real app, call API
-      // await api.createAppointment({ ... });
-      
-      Alert.alert(copy.success, copy.bookingConfirmed, [
-        { text: copy.ok, onPress: () => navigation.goBack() },
-      ]);
+      const slots = await loadAvailableSlots(doctor, selectedDate);
+      if (!alive.current) return;
+      if (!slots.includes(selectedTime)) {
+        setAvailableSlots(slots); setSelectedTime(''); throw new Error(copy.selectFuture);
+      }
+      // The current API compares facility-local date/time strings when excluding booked slots.
+      const body = { patientId: patientId.trim(), patientName: patientName.trim(), facilityId: doctor.facilityId,
+        doctorId: doctor.id, dateTime: `${selectedDate}T${selectedTime}:00`, type: appointmentType, priority };
+      submitted = true;
+      const result = await configuredApiRequest('/appointments', 'POST', body);
+      const booking = result as Record<string, unknown> | null;
+      if (!booking || typeof booking.id !== 'string' || !booking.id.trim() || booking.status !== 'BOOKED' ||
+          Object.entries(body).some(([key, value]) => booking[key] !== value)) throw new Error(copy.bookingUnconfirmed);
+      if (alive.current) setBookingId(booking.id);
     } catch (e) {
-      setError(copy.bookingFailed);
+      if (alive.current) {
+        setBookingUncertain(submitted);
+        setError(submitted ? copy.bookingUnconfirmed : e instanceof Error ? e.message : copy.bookingFailed);
+      }
     } finally {
-      setLoading(false);
+      bookLock.current = false;
+      if (alive.current) setLoading(false);
     }
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = new Date(`${dateStr}T12:00:00`);
     return date.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
   };
 
-  const today = new Date().toISOString().split('T')[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
-
-  const next7Days = useMemo(() => {
-    const days = [];
-    for (let i = 0; i < 14; i++) {
-      const date = new Date(Date.now() + i * 86400000);
-      days.push({
-        date: date.toISOString().split('T')[0],
+  const next14Days = Array.from({ length: 14 }, (_, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      return {
+        date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
         dayName: date.toLocaleDateString('en-IN', { weekday: 'short' }),
         dayNum: date.getDate(),
         month: date.toLocaleDateString('en-IN', { month: 'short' }),
         isToday: i === 0,
         isTomorrow: i === 1,
-      });
-    }
-    return days;
-  }, []);
+      };
+  });
 
   const handleDateSelect = (date: string) => {
+    if (date === selectedDate) { setShowCalendar(false); return; }
     setSelectedDate(date);
-    setSelectedDateForSlots(date);
+    slotVersion.current += 1;
+    setAvailableSlots([]);
     setShowCalendar(false);
     setSelectedTime('');
   };
@@ -158,15 +184,20 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
         <View style={styles.header}>
           <Text style={styles.headerTitle}>{copy.title}</Text>
           <Text style={styles.headerSubtitle}>{copy.subtitle}</Text>
+          {language !== 'en' && <Text style={styles.headerSubtitle}>{copy.languageGap}</Text>}
+          <Text style={styles.headerSubtitle}>{connected ? copy.backendNotice : copy.notConnected}</Text>
+          <Text style={styles.headerSubtitle}>{copy.timezoneNotice}</Text>
         </View>
 
         {/* Priority Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{copy.priority}</Text>
+          <Text style={styles.headerSubtitle}>{copy.emergencyNotice}</Text>
           <View style={styles.priorityRow}>
             {(['GREEN', 'YELLOW', 'RED'] as const).map((p) => (
               <TouchableOpacity
                 key={p}
+                disabled={loading || !!bookingId || bookingUncertain}
                 style={[
                   styles.priorityButton,
                   priority === p && styles.priorityButtonActive,
@@ -182,7 +213,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
                   styles.priorityButtonText,
                   priority === p && styles.priorityButtonTextActive,
                 ]}>
-                  {copy[p.toLowerCase() as keyof typeof copy]}
+                  {{ GREEN: copy.green, YELLOW: copy.yellow, RED: copy.red }[p]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -190,10 +221,14 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
         </View>
 
         <View style={styles.form}>
+          <Text style={styles.label}>{copy.patientId}</Text>
+          <TextInput style={styles.input} value={patientId} onChangeText={setPatientId}
+            autoCapitalize="none" placeholder={copy.patientIdPlaceholder} editable={!loading && !bookingId && !bookingUncertain} />
           <Text style={styles.label}>{copy.patientName}</Text>
           <TextInput
             style={styles.input}
             value={patientName}
+            editable={!loading && !bookingId && !bookingUncertain}
             onChangeText={setPatientName}
             placeholder={copy.patientNamePlaceholder}
             placeholderTextColor={COLORS.textSecondary}
@@ -204,6 +239,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
             {(['OUTPATIENT', 'TELECONSULT', 'DIAGNOSTIC'] as const).map((type) => (
               <TouchableOpacity
                 key={type}
+                disabled={loading || !!bookingId || bookingUncertain}
                 style={[styles.typeButton, appointmentType === type && styles.typeButtonActive]}
                 onPress={() => setAppointmentType(type)}
               >
@@ -211,7 +247,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
                   styles.typeText,
                   appointmentType === type && styles.typeTextActive,
                 ]}>
-                  {copy[type.toLowerCase() as keyof typeof copy]}
+                  {{ OUTPATIENT: copy.outpatient, TELECONSULT: copy.teleconsult, DIAGNOSTIC: copy.diagnostic }[type]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -226,21 +262,26 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
                   styles.doctorCard,
                   selectedDoctor === doc.id && styles.doctorCardActive,
                 ]}
-                onPress={() => setSelectedDoctor(doc.id)}
+                disabled={loading || !!bookingId || bookingUncertain}
+                onPress={() => { if (doc.id === selectedDoctor) return; slotVersion.current += 1; setSelectedDoctor(doc.id); setSelectedTime(''); setAvailableSlots([]); }}
               >
                 <Text style={styles.doctorName}>{doc.name}</Text>
                 <Text style={styles.doctorSpecialty}>{doc.specialty}</Text>
+                <Text style={styles.doctorSpecialty}>{doc.facilityId}</Text>
               </TouchableOpacity>
             ))}
-            {doctors.length === 0 && <Text style={styles.noDoctors}>{copy.noDoctorsAvailable}</Text>}
+            {doctorsLoading && <Text style={styles.noDoctors}>{copy.loadingDoctors}</Text>}
+            {!!doctorsError && <Text accessibilityRole="alert" style={styles.errorText}>{doctorsError}</Text>}
+            {connected && !doctorsLoading && <TouchableOpacity onPress={() => setDoctorRetry(n => n + 1)} disabled={loading || !!bookingId || bookingUncertain}><Text style={styles.label}>{copy.retry}</Text></TouchableOpacity>}
+            {connected && !doctorsLoading && !doctorsError && doctors.length === 0 && <Text style={styles.noDoctors}>{copy.noDoctorsAvailable}</Text>}
           </View>
 
           {/* Calendar View */}
           <Text style={styles.label}>{copy.selectDate}</Text>
-          <TouchableOpacity style={styles.dateButton} onPress={() => setShowCalendar(true)}>
+          <TouchableOpacity disabled={loading || !!bookingId || bookingUncertain} style={styles.dateButton} onPress={() => setShowCalendar(true)}>
             <Text style={[
               styles.dateButtonText,
-              selectedDate && styles.dateButtonTextSelected,
+              !!selectedDate && styles.dateButtonTextSelected,
             ]}>
               {selectedDate ? formatDate(selectedDate) : copy.selectDatePlaceholder}
             </Text>
@@ -253,8 +294,8 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
               transparent={true}
               onRequestClose={() => setShowCalendar(false)}
             >
-              <View style={styles.modalOverlay} onTouchStart={() => setShowCalendar(false)}>
-                <View style={styles.modalCard} onTouchStart={(e) => e.stopPropagation()}>
+              <View style={styles.modalOverlay}>
+                <View style={styles.modalCard}>
                   <View style={styles.modalHeader}>
                     <Text style={styles.modalTitle}>{copy.calendarTitle}</Text>
                     <TouchableOpacity style={styles.modalClose} onPress={() => setShowCalendar(false)}>
@@ -262,7 +303,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
                     </TouchableOpacity>
                   </View>
                   <ScrollView contentContainerStyle={styles.calendarGrid}>
-                    {next7Days.map((day) => (
+                    {next14Days.map((day) => (
                       <TouchableOpacity
                         key={day.date}
                         style={[
@@ -308,6 +349,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
             {availableSlots.map((slot) => (
               <TouchableOpacity
                 key={slot}
+                disabled={loading || slotsLoading || !!bookingId || bookingUncertain}
                 style={[
                   styles.timeSlot,
                   selectedTime === slot && styles.timeSlotActive,
@@ -322,14 +364,24 @@ export const AppointmentBookScreen: React.FC<{ navigation: any }> = ({ navigatio
                 </Text>
               </TouchableOpacity>
             ))}
-            {availableSlots.length === 0 && selectedDate && (
+            {slotsLoading && <Text style={styles.noSlots}>{copy.loadingSlots}</Text>}
+            {!!slotsError && <Text accessibilityRole="alert" style={styles.errorText}>{slotsError}</Text>}
+            {connected && selectedDate && selectedDoctor && !slotsLoading && <TouchableOpacity onPress={() => setSlotRetry(n => n + 1)} disabled={loading || !!bookingId || bookingUncertain}><Text style={styles.label}>{copy.retry}</Text></TouchableOpacity>}
+            {(!selectedDate || !selectedDoctor) && <Text style={styles.noSlots}>{copy.chooseDoctorDate}</Text>}
+            {connected && !slotsLoading && !slotsError && availableSlots.length === 0 && !!selectedDate && !!selectedDoctor && (
               <Text style={styles.noSlots}>{copy.noSlotsAvailable}</Text>
             )}
           </View>
 
-          {error && <Text style={styles.errorText}>{error}</Text>}
+          {!!error && <Text accessibilityRole="alert" style={styles.errorText}>{error}</Text>}
+          {!!bookingId && <View style={styles.section}>
+            <Text style={styles.label}>{copy.bookingConfirmed}</Text>
+            <Text selectable style={styles.label}>{copy.bookingReference} {bookingId}</Text>
+            <TouchableOpacity onPress={() => navigation.goBack()}><Text style={styles.label}>{copy.ok}</Text></TouchableOpacity>
+          </View>}
 
-          <TouchableOpacity style={[styles.bookButton, loading && styles.disabled]} onPress={handleBook} disabled={loading}>
+          <TouchableOpacity style={[styles.bookButton, (!connected || loading || slotsLoading || !!bookingId || bookingUncertain) && styles.disabled]} onPress={handleBook}
+            disabled={!connected || loading || slotsLoading || !!bookingId || bookingUncertain}>
             <Text style={styles.bookButtonText}>
               {loading ? copy.booking : copy.bookAppointment}
             </Text>
@@ -414,5 +466,3 @@ const styles = StyleSheet.create({
   noDoctors: { color: COLORS.textSecondary, textAlign: 'center', padding: 20 },
   errorText: { color: COLORS.danger, fontSize: 13, marginTop: 8 },
 });
-
-export { AppointmentBookScreen };

@@ -30,7 +30,7 @@ const clients: Map<string, Socket[]> = new Map();
 const globalClients: Socket[] = [];
 
 export function registerWebSocket(fastify: FastifyInstance) {
-  fastify.get('/ws', { websocket: true }, (socket, req) => {
+  fastify.get('/ws', { websocket: true }, (socket) => {
     socket.on('message', (msg: Buffer) => {
       try {
         const parsed = JSON.parse(msg.toString());

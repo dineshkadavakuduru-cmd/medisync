@@ -1,4 +1,4 @@
-import { Patient, Referral, TriageResult, HealthRecord, Facility } from '../types/index.js';
+import { Patient, Referral, TriageResult, Facility } from '../types/index.js';
 
 const FHIR_SYSTEMS = {
   abha: 'https://ndhm.gov.in/healthid/v1.0',
