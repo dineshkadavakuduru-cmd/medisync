@@ -1,6 +1,8 @@
 import { Appointment, QueueEntry, AppointmentStatus, AppointmentType, TriageSeverity } from '../types/index.js';
 import { mockFacilities } from '../database/facilities.js';
 import { getDoctors } from './teleconsultService.js';
+import { ApiError } from '../validation.js';
+import { isPastSlot, parseScheduledTime, scheduledSlot } from './istTime.js';
 
 const appointments: Map<string, Appointment> = new Map();
 
@@ -24,6 +26,23 @@ const DOCTOR_APPOINTMENTS: { doctorId: string; availableSlots: string[] }[] = [
   { doctorId: 'doc-4', availableSlots: ['09:00', '09:30', '10:30', '11:00', '11:30', '14:00', '14:30', '15:30', '16:00', '16:30'] },
 ];
 
+const ACTIVE_STATUSES: AppointmentStatus[] = ['BOOKED', 'CHECKED_IN', 'IN_PROGRESS'];
+
+function isDoctorSlot(doctorId: string, time: string): boolean {
+  return DOCTOR_APPOINTMENTS.find((entry) => entry.doctorId === doctorId)?.availableSlots.includes(time) === true;
+}
+
+function hasBookingConflict(doctorId: string, dateTime: string): boolean {
+  const slot = scheduledSlot(dateTime);
+  if (!slot) return true;
+  return getAllAppointments().some((appointment) => {
+    if (appointment.doctorId !== doctorId) return false;
+    if (!ACTIVE_STATUSES.includes(appointment.status)) return false;
+    const existing = scheduledSlot(appointment.dateTime);
+    return existing?.date === slot.date && existing.time === slot.time;
+  });
+}
+
 function generateId(): string {
   return `apt-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 }
@@ -43,7 +62,20 @@ export function createAppointment(data: {
   priority: TriageSeverity;
 }): Appointment {
   const facility = mockFacilities.find((f) => f.id === data.facilityId);
+  if (!facility) throw new ApiError(400, 'Unknown facility');
+  if (!APPOINTMENT_TYPES.includes(data.type)) throw new ApiError(400, 'Invalid appointment type');
+  if (!['RED', 'YELLOW', 'GREEN'].includes(data.priority)) throw new ApiError(400, 'Invalid priority');
   const doctor = data.doctorId ? getDoctors().find((d) => d.id === data.doctorId) : undefined;
+  if (data.doctorId && !doctor) throw new ApiError(400, 'Doctor not found');
+  if (!data.patientId.trim() || !data.patientName.trim()) throw new ApiError(400, 'Patient details are required');
+
+  const slot = scheduledSlot(data.dateTime);
+  if (!slot || parseScheduledTime(data.dateTime) === undefined) throw new ApiError(400, 'Invalid appointment time');
+  if (isPastSlot(slot.date, slot.time)) throw new ApiError(400, 'Appointment time must be in the future');
+  if (doctor) {
+    if (!isDoctorSlot(doctor.id, slot.time)) throw new ApiError(400, 'Selected time is outside the clinician schedule');
+    if (hasBookingConflict(doctor.id, data.dateTime)) throw new ApiError(409, 'This slot is already booked');
+  }
 
   const severityRank = getTriageSeverityRank(data.priority);
   const baseWait = data.type === 'TELECONSULT' ? 5 : data.type === 'DIAGNOSTIC' ? 15 : 30;
@@ -151,11 +183,13 @@ export function getAvailableSlots(facilityId: string, date: string, doctorId?: s
     if (!doc) return;
     const available = DOCTOR_APPOINTMENTS.find((da) => da.doctorId === doc.id)?.availableSlots || [];
     const booked = getAppointmentsByDoctor(doc.id, date)
-      .filter((a) => a.status === 'BOOKED' || a.status === 'CHECKED_IN' || a.status === 'IN_PROGRESS')
-      .map((a) => a.dateTime.split('T')[1]?.substring(0, 5));
+      .filter((a) => ACTIVE_STATUSES.includes(a.status))
+      .map((a) => scheduledSlot(a.dateTime))
+      .filter((slot): slot is { date: string; time: string } => slot?.date === date)
+      .map((slot) => slot.time);
 
     available.forEach((slot) => {
-      if (!booked.includes(slot) && !allSlots.includes(slot)) {
+      if (!booked.includes(slot) && !allSlots.includes(slot) && !isPastSlot(date, slot)) {
         allSlots.push(slot);
       }
     });
@@ -164,15 +198,31 @@ export function getAvailableSlots(facilityId: string, date: string, doctorId?: s
   return allSlots.sort();
 }
 
+function nextFutureSlots(count: number): { date: string; time: string }[] {
+  const found: { date: string; time: string }[] = [];
+  const now = new Date();
+  for (let offset = 0; offset < 21 && found.length < count; offset++) {
+    const day = new Date(now.getTime() + offset * 86_400_000);
+    const date = `${day.getUTCFullYear()}-${String(day.getUTCMonth() + 1).padStart(2, '0')}-${String(day.getUTCDate()).padStart(2, '0')}`;
+    for (const slot of getAvailableSlots('facility-2', date, 'doc-1')) {
+      found.push({ date, time: slot });
+      if (found.length === count) break;
+    }
+  }
+  return found;
+}
+
 export function seedDemoAppointments() {
   if (appointments.size > 0) return;
+  const slots = nextFutureSlots(3);
+  if (slots.length < 3) return;
 
   createAppointment({
     patientId: 'patient-1',
     patientName: 'राजेश पाटिल',
     facilityId: 'facility-2',
     doctorId: 'doc-1',
-    dateTime: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
+    dateTime: `${slots[0].date}T${slots[0].time}:00`,
     type: 'OUTPATIENT',
     priority: 'GREEN' as TriageSeverity,
   });
@@ -182,7 +232,7 @@ export function seedDemoAppointments() {
     patientName: 'सुनीता शिंदे',
     facilityId: 'facility-2',
     doctorId: 'doc-1',
-    dateTime: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+    dateTime: `${slots[1].date}T${slots[1].time}:00`,
     type: 'OUTPATIENT',
     priority: 'YELLOW' as TriageSeverity,
   });
@@ -192,7 +242,7 @@ export function seedDemoAppointments() {
     patientName: 'आनंद जोशी',
     facilityId: 'facility-2',
     doctorId: 'doc-1',
-    dateTime: new Date().toISOString(),
+    dateTime: `${slots[2].date}T${slots[2].time}:00`,
     type: 'OUTPATIENT',
     priority: 'YELLOW' as TriageSeverity,
   });

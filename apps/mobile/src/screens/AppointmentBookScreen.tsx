@@ -99,7 +99,8 @@ export const AppointmentBookScreen: React.FC<{ navigation: any; route?: any }> =
     if (!Array.isArray(slots) || slots.some(s => typeof s !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s))) {
       throw new Error(copy.invalidSlots);
     }
-    return [...new Set(slots as string[])].filter(s => new Date(`${date}T${s}:00`).getTime() > Date.now()).sort();
+    // Slots are clinic-local IST times; compare against the real current instant.
+    return [...new Set(slots as string[])].filter(s => Date.parse(`${date}T${s}:00+05:30`) > Date.now()).sort();
   };
 
   const handleBook = async () => {
@@ -110,7 +111,7 @@ export const AppointmentBookScreen: React.FC<{ navigation: any; route?: any }> =
       setError(copy.fillAllFields);
       return;
     }
-    if (slotsLoading || slotsError || !availableSlots.includes(selectedTime) || new Date(`${selectedDate}T${selectedTime}:00`).getTime() <= Date.now()) {
+    if (slotsLoading || slotsError || !availableSlots.includes(selectedTime) || Date.parse(`${selectedDate}T${selectedTime}:00+05:30`) <= Date.now()) {
       setError(copy.selectFuture); return;
     }
     bookLock.current = true;
@@ -149,13 +150,13 @@ export const AppointmentBookScreen: React.FC<{ navigation: any; route?: any }> =
   };
 
   const next14Days = Array.from({ length: 14 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() + i);
+      // Build the calendar in IST so the demo matches clinic-local dates everywhere.
+      const date = new Date(Date.now() + 330 * 60_000 + i * 86_400_000);
       return {
-        date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
-        dayName: date.toLocaleDateString('en-IN', { weekday: 'short' }),
-        dayNum: date.getDate(),
-        month: date.toLocaleDateString('en-IN', { month: 'short' }),
+        date: `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`,
+        dayName: date.toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' }),
+        dayNum: date.getUTCDate(),
+        month: date.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' }),
         isToday: i === 0,
         isTomorrow: i === 1,
       };

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, StyleSheet, SafeAreaView, TouchableOpacity, Modal, TextInput, Platform, Clipboard } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { teleconsultClient, TeleconsultRole, TeleconsultSession, TeleconsultStatus, DoctorAvailability, PrescriptionMedication } from '../services/teleconsultClient';
@@ -7,13 +8,21 @@ import { TeleconsultMeeting } from '../components/TeleconsultMeeting';
 import { teleconsultCopy as copy } from '../i18n/translations/teleconsult';
 import { useTranslation } from '../i18n';
 import { isDemoActive, onDemoModeChange } from '../services/demoMode';
+import { getActivePersona, onPersonaChange } from '../services/personas';
+
+const TARGET_KEY_PREFIX = 'medisync_teleconsult_target:';
+const DEFAULT_TARGET_MINUTES = 30;
+
+function roleForPersona(): TeleconsultRole {
+  return getActivePersona().role === 'DOCTOR' ? 'doctor' : 'patient';
+}
 
 export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = ({ navigation, route }) => {
   const { language } = useTranslation();
   const [isDemo, setIsDemo] = useState(isDemoActive);
   const sessionId = typeof route.params?.sessionId === 'string' ? route.params.sessionId : '';
   const [session, setSession] = useState<TeleconsultSession | null>(null);
-  const [role, setRole] = useState<TeleconsultRole>('patient');
+  const [role, setRole] = useState<TeleconsultRole>(roleForPersona);
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [joined, setJoined] = useState(false);
   const [error, setError] = useState('');
@@ -25,7 +34,8 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
   const [prescriptionNotes, setPrescriptionNotes] = useState('');
   const [savingPrescription, setSavingPrescription] = useState(false);
   const [sessionTimer, setSessionTimer] = useState(0);
-  const [targetMinutes, setTargetMinutes] = useState(30);
+  const [targetMinutes, setTargetMinutes] = useState(DEFAULT_TARGET_MINUTES);
+  const [autoEnded, setAutoEnded] = useState(false);
   const [message, setMessage] = useState('');
   const [prescriptionError, setPrescriptionError] = useState('');
   const [availability, setAvailability] = useState<DoctorAvailability[]>([]);
@@ -62,7 +72,35 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
     setJoined(false);
   };
 
-  const extendSession = () => setTargetMinutes(minutes => minutes + 5);
+  const extendSession = () => {
+    setTargetMinutes(minutes => {
+      const next = minutes + 5;
+      void AsyncStorage.setItem(`${TARGET_KEY_PREFIX}${sessionId}`, String(next)).catch(() => {
+        console.warn('Could not persist the consultation target; the extension applies to this session only.');
+      });
+      return next;
+    });
+    setAutoEnded(false);
+    setMessage('');
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    setTargetMinutes(DEFAULT_TARGET_MINUTES);
+    setAutoEnded(false);
+    if (!sessionId) return;
+    AsyncStorage.getItem(`${TARGET_KEY_PREFIX}${sessionId}`).then(saved => {
+      const parsed = Number(saved);
+      if (!cancelled && Number.isFinite(parsed) && parsed >= 5 && parsed <= 480) setTargetMinutes(parsed);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  useEffect(() => {
+    return onPersonaChange((persona) => {
+      setRole(persona.role === 'DOCTOR' ? 'doctor' : 'patient');
+    });
+  }, []);
 
   useEffect(() => {
     const start = session?.startedAt ? Date.parse(session.startedAt) : NaN;
@@ -73,6 +111,14 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
     const interval = setInterval(tick, 1000);
     return () => clearInterval(interval);
   }, [session?.startedAt, session?.status]);
+
+  useEffect(() => {
+    if (session?.status !== 'IN_PROGRESS' || autoEnded) return;
+    if (sessionTimer < targetMinutes * 60_000) return;
+    setAutoEnded(true);
+    setMessage(copy.autoEnded);
+    closeMeeting();
+  }, [sessionTimer, targetMinutes, session?.status, autoEnded]);
 
   useEffect(() => {
     if (!showAvailability) return;
@@ -103,12 +149,13 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
       setBusy(false);
       setSavingPrescription(false);
       setSession(null);
-      setRole('patient');
       setError('');
       setMessage('');
       setCopySuccess(false);
-      setTargetMinutes(30);
+      setTargetMinutes(DEFAULT_TARGET_MINUTES);
+      setAutoEnded(false);
       setSessionTimer(0);
+      setRole(roleForPersona());
       setShowAvailability(false);
       setAvailability([]);
       setAvailabilityError('');
@@ -206,14 +253,25 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
   const shareViaWhatsApp = async () => {
     if (!session?.meetingLink) return;
     const currentMode = modeVersion.current;
-    const message = `Join my MediSync teleconsultation: ${session.meetingLink}`;
-    const url = `https://wa.me/?text=${encodeURIComponent(message)}`;
-    try {
-      const { Linking } = await import('react-native');
-      if (!alive.current || currentMode !== modeVersion.current) return;
-      await Linking.openURL(url);
-    } catch (e) {
-      if (alive.current && currentMode === modeVersion.current) setError(copy.shareFailed);
+    const shareMessage = `Join my MediSync teleconsultation: ${session.meetingLink}`;
+    const waMe = `https://wa.me/?text=${encodeURIComponent(shareMessage)}`;
+    const { Linking, Platform: RNPlatform } = await import('react-native');
+    const attempts = RNPlatform.OS === 'web' ? [waMe] : [`whatsapp://send?text=${encodeURIComponent(shareMessage)}`, waMe];
+    let opened = false;
+    for (const url of attempts) {
+      try {
+        if (!alive.current || currentMode !== modeVersion.current) return;
+        await Linking.openURL(url);
+        opened = true;
+        break;
+      } catch {
+        // Try the next transport (native app, then the web fallback).
+      }
+    }
+    if (!alive.current || currentMode !== modeVersion.current) return;
+    if (!opened) {
+      await copyMeetingLink();
+      if (alive.current && currentMode === modeVersion.current) setMessage(copy.shareFailed);
     }
   };
 
@@ -333,6 +391,13 @@ export const TeleconsultJoinScreen: React.FC<{ navigation: any; route: any }> = 
                   {!!med.instructions && <Text style={styles.medDetails}>{med.instructions}</Text>}
                 </View>)}
                 {!!session.prescription.notes && <Text style={styles.medNotes}>{session.prescription.notes}</Text>}
+                <Text style={styles.notice}>{copy.referralHandoffNote}</Text>
+                <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate('TriageFlow', {
+                  patientId: session.patientId || (isDemo ? 'demo-patient' : ''),
+                  facilityId: session.fromFacilityId || (isDemo ? 'facility-2' : ''),
+                })}>
+                  <Text style={styles.actionButtonText}>{copy.referralHandoff}</Text>
+                </TouchableOpacity>
               </View>}
             </View>
 

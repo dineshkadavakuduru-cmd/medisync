@@ -31,10 +31,19 @@ export interface Prescription {
   createdAt: string;
 }
 
+export interface TeleconsultDoctor {
+  id: string;
+  name: string;
+  facilityId: string;
+  specialty: string;
+  languages: string[];
+}
+
 export interface TeleconsultSession {
   id: string;
   patientId?: string;
   doctorId?: string;
+  fromFacilityId?: string;
   doctorSpecialty?: string;
   specialty?: string;
   patientName: string;
@@ -48,6 +57,14 @@ export interface TeleconsultSession {
   prescription?: Prescription;
 }
 
+export interface NewTeleconsultRequest {
+  patientName: string;
+  patientId?: string;
+  fromFacilityId: string;
+  doctorId: string;
+  scheduledTime: string;
+}
+
 const transitions: Record<TeleconsultStatus, TeleconsultStatus[]> = {
   REQUESTED: ['ACCEPTED', 'DECLINED', 'CANCELLED'],
   ACCEPTED: ['IN_PROGRESS', 'CANCELLED'],
@@ -55,6 +72,24 @@ const transitions: Record<TeleconsultStatus, TeleconsultStatus[]> = {
   COMPLETED: [], DECLINED: [], CANCELLED: [],
 };
 const storageKey = 'teleconsult.demo.v1';
+
+// Mirrors the backend's seeded clinician roster so demo and server modes behave alike.
+const DEMO_DOCTORS: TeleconsultDoctor[] = [
+  { id: 'doc-1', name: 'डॉ. शर्मा', facilityId: 'facility-2', specialty: 'General Physician', languages: ['en', 'hi', 'mr'] },
+  { id: 'doc-2', name: 'डॉ. पाटिल', facilityId: 'facility-8', specialty: 'Cardiologist', languages: ['en', 'hi', 'mr'] },
+  { id: 'doc-3', name: 'डॉ. शिंदे', facilityId: 'facility-2', specialty: 'Pediatrician', languages: ['en', 'hi', 'mr'] },
+  { id: 'doc-4', name: 'डॉ. कुलकर्णी', facilityId: 'facility-8', specialty: 'Neurologist', languages: ['en', 'hi', 'mr'] },
+];
+
+function validateDoctor(value: unknown): TeleconsultDoctor {
+  const d = value as TeleconsultDoctor;
+  if (!d || typeof d.id !== 'string' || !d.id.trim() || typeof d.name !== 'string' || !d.name.trim() ||
+      typeof d.facilityId !== 'string' || !d.facilityId.trim() || typeof d.specialty !== 'string' ||
+      !Array.isArray(d.languages) || d.languages.some(l => typeof l !== 'string')) {
+    throw new Error('Invalid doctor response');
+  }
+  return d;
+}
 type Storage = { getItem(key: string): Promise<string | null>; setItem(key: string, value: string): Promise<void> };
 
 export function isMeetingLink(value: string): boolean {
@@ -71,7 +106,7 @@ function validateSession(value: unknown): TeleconsultSession {
       (['ACCEPTED', 'IN_PROGRESS', 'COMPLETED'].includes(s.status) && !isMeetingLink(s.meetingLink))) {
     throw new Error('Invalid teleconsult session response');
   }
-  for (const key of ['patientId', 'doctorId', 'doctorSpecialty', 'specialty'] as const) {
+  for (const key of ['patientId', 'doctorId', 'fromFacilityId', 'doctorSpecialty', 'specialty'] as const) {
     if (s[key] !== undefined && typeof s[key] !== 'string') throw new Error('Invalid session metadata');
   }
   for (const key of ['startedAt', 'completedAt'] as const) {
@@ -170,6 +205,50 @@ export function createTeleconsultClient(origin = '', storage?: Storage, demoMode
       if (!Array.isArray(data)) throw new Error('Invalid teleconsult list response');
       return data.map(validateSession);
     },
+    async listDoctors(): Promise<TeleconsultDoctor[]> {
+      if (demoMode()) return DEMO_DOCTORS.map((doctor) => ({ ...doctor, languages: [...doctor.languages] }));
+      const data = await request('/doctors');
+      if (!Array.isArray(data) || !data.length) throw new Error('Invalid doctor list response');
+      const doctors = data.map(validateDoctor);
+      if (new Set(doctors.map((d) => d.id)).size !== doctors.length) throw new Error('Invalid doctor list response');
+      return doctors;
+    },
+    async create(data: NewTeleconsultRequest): Promise<TeleconsultSession> {
+      const patientName = data.patientName.trim();
+      const fromFacilityId = data.fromFacilityId.trim();
+      const doctorId = data.doctorId.trim();
+      if (!patientName || !fromFacilityId || !doctorId || !Number.isFinite(Date.parse(data.scheduledTime))) {
+        throw new Error('Patient, facility, clinician and a valid time are required');
+      }
+      const body = {
+        ...(data.patientId?.trim() ? { patientId: data.patientId.trim() } : {}),
+        patientName, fromFacilityId, doctorId, scheduledTime: data.scheduledTime,
+      };
+      if (!demoMode()) {
+        return validateSession(await request('/sessions', 'POST', body));
+      }
+      return local(async (sessions) => {
+        const doctor = DEMO_DOCTORS.find((d) => d.id === doctorId);
+        if (!doctor) throw new Error('Unknown clinician');
+        const now = new Date().toISOString();
+        const session: TeleconsultSession = {
+          id: `demo-${await opaqueToken()}`,
+          patientId: body.patientId || 'demo-patient',
+          patientName,
+          fromFacilityId,
+          doctorId: doctor.id,
+          doctorName: doctor.name,
+          doctorSpecialty: doctor.specialty,
+          specialty: doctor.specialty,
+          scheduledTime: data.scheduledTime,
+          createdAt: now,
+          status: 'REQUESTED',
+          meetingLink: '',
+        };
+        sessions.push(session);
+        return { ...session };
+      }, true);
+    },
     async get(id: string): Promise<TeleconsultSession> {
       if (!id) throw new Error('Session ID is required');
       if (!demoMode()) {
@@ -240,9 +319,12 @@ export function createTeleconsultClient(origin = '', storage?: Storage, demoMode
     },
     async getAvailableSlots(doctorId: string, date: string): Promise<string[]> {
       if (demoMode()) {
-        const dayOfWeek = new Date(date).getDay();
+        const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+        if (!parts) return [];
+        const dayOfWeek = new Date(Date.UTC(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))).getUTCDay();
         if (dayOfWeek === 0 || dayOfWeek === 6) return [];
-        return ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
+        const all = ['09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00', '16:30'];
+        return all.filter(slot => Date.parse(`${date}T${slot}:00+05:30`) > Date.now());
       }
       const data = await request(`/doctors/${encodeURIComponent(doctorId)}/slots/${encodeURIComponent(date)}`);
       if (!data || typeof data !== 'object' || !Array.isArray((data as any).slots)) {

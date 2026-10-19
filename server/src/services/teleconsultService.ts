@@ -5,6 +5,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { FileStore } from '../database/fileStore.js';
 import { ApiError } from '../validation.js';
+import { isPastSlot, istDayOfWeek, parseScheduledTime, scheduledSlot } from './istTime.js';
 
 // Single-process demo persistence. Production needs a transactional shared database.
 const storePath = resolve(process.env.TELECONSULT_STORE_PATH || 'data/teleconsult-sessions.json');
@@ -78,6 +79,14 @@ export function createSession(data: {
   }
   if (!data.patientName?.trim() || !Number.isFinite(Date.parse(data.scheduledTime))) {
     throw new Error('Patient name and valid scheduled time are required');
+  }
+  // Immediate demo requests are allowed; future scheduled consultations must be a
+  // free, in-hours IST slot so two patients cannot hold the same clinician slot.
+  const slot = scheduledSlot(data.scheduledTime);
+  const scheduledEpoch = parseScheduledTime(data.scheduledTime);
+  if (slot && scheduledEpoch !== undefined && scheduledEpoch > Date.now() + 5 * 60_000 &&
+      !isSlotAvailable(data.doctorId, data.scheduledTime)) {
+    throw new ApiError(409, 'Selected consultation slot is unavailable');
   }
 
   const session: TeleconsultSession = {
@@ -180,8 +189,9 @@ export function getDoctorAvailability(doctorId: string): DoctorAvailability[] {
   return DOCTOR_AVAILABILITY.filter((a) => a.doctorId === doctorId);
 }
 
-export function getAvailableSlotsForDoctor(doctorId: string, date: string): string[] {
-  const dayOfWeek = new Date(date).getDay();
+export function getAvailableSlotsForDoctor(doctorId: string, date: string, now = new Date()): string[] {
+  const dayOfWeek = istDayOfWeek(date);
+  if (dayOfWeek === undefined) return [];
   const availability = DOCTOR_AVAILABILITY.filter(
     (a) => a.doctorId === doctorId && a.dayOfWeek === dayOfWeek && !a.isException
   );
@@ -208,14 +218,33 @@ export function getAvailableSlotsForDoctor(doctorId: string, date: string): stri
     }
   }
 
-  // Filter out already booked slots
+  // Filter out already booked slots and slots whose IST start time has passed.
   const bookedSlots = getAllSessions()
-    .filter((s) => s.doctorId === doctorId && s.scheduledTime.startsWith(date) && 
-      ['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(s.status))
-    .map((s) => s.scheduledTime.split('T')[1]?.substring(0, 5))
-    .filter(Boolean);
+    .filter((s) => {
+      if (s.doctorId !== doctorId) return false;
+      if (!['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(s.status)) return false;
+      return scheduledSlot(s.scheduledTime)?.date === date;
+    })
+    .map((s) => scheduledSlot(s.scheduledTime)?.time)
+    .filter((slot): slot is string => !!slot);
 
-  return slots.filter((slot) => !bookedSlots.includes(slot));
+  return slots.filter((slot) => !bookedSlots.includes(slot) && !isPastSlot(date, slot, now));
+}
+
+export function isSlotAvailable(doctorId: string, scheduledTime: string, now = new Date()): boolean {
+  const slot = scheduledSlot(scheduledTime);
+  if (!slot || isPastSlot(slot.date, slot.time, now)) return false;
+  const booked = getAllSessions().some((s) => {
+    if (s.doctorId !== doctorId) return false;
+    if (!['REQUESTED', 'ACCEPTED', 'IN_PROGRESS'].includes(s.status)) return false;
+    const other = scheduledSlot(s.scheduledTime);
+    return other?.date === slot.date && other.time === slot.time;
+  });
+  if (booked) return false;
+  const day = istDayOfWeek(slot.date);
+  if (day === undefined) return false;
+  return DOCTOR_AVAILABILITY.some((a) => a.doctorId === doctorId && a.dayOfWeek === day && !a.isException &&
+    a.startTime <= slot.time && slot.time < a.endTime);
 }
 
 export function createPrescription(data: {

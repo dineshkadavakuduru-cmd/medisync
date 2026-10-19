@@ -30,7 +30,8 @@ export const teleconsultCopy = {
   meetingLink: 'Meeting Link', copyMeetingLink: 'Copy Meeting Link', shareViaWhatsApp: 'Share via WhatsApp',
   sessionTimer: 'Elapsed session time', sessionDuration: 'Session Duration', autoEndAt: 'Suggested end',
   extendSession: 'Add 5 min to local target', timeRemaining: 'Local target remaining',
-  timerNotice: 'Informational timer only. Extensions change this screen only, not the backend. Reopening resets the target to 30 minutes from the session start. Reaching zero never disconnects the call or completes the record.',
+  timerNotice: 'The consultation auto-closes the embedded meeting when the local target ends. The target is saved on this device per session; adding 5 minutes reopens the meeting but never changes the backend record.',
+  autoEnded: 'The consultation target time ended and the embedded meeting was closed. Add 5 minutes to reopen it, or mark the consultation completed.',
   timerUnknown: 'Session start time is unavailable. No duration can be calculated.',
   prescription: 'Prescription', writePrescription: 'Write Prescription', addMedication: 'Add Medication',
   medicationName: 'Medication Name', dosage: 'Dosage', frequency: 'Frequency', duration: 'Duration',
@@ -43,6 +44,7 @@ export const teleconsultCopy = {
   requiredMedication: 'Enter a name, dosage, frequency and duration for every medication.',
   saving: 'Saving...', saved: 'Saved', notes: 'Notes (optional)', remove: 'Remove', medication: 'Medication',
   currentPrescription: 'Saved prescription',
+  referralHandoff: 'Create referral for this patient', referralHandoffNote: 'Opens the triage and referral flow with this patient and facility pre-filled. The referral is queued locally until the backend confirms it.',
   manualCopy: 'Automatic copy is unavailable. Select and copy the meeting link manually.',
   shareFailed: 'Unable to open WhatsApp. You can copy the meeting link instead.',
   availabilityDemo: 'Sample weekly availability only, not a live clinician schedule.',
@@ -56,4 +58,14 @@ export const teleconsultCopy = {
   all: 'All', upcoming: 'Active', past: 'Closed',
   noMatches: 'No consultations match these filters.', specialtyMissing: 'No specialty data supplied. Names are not used to infer specialties.',
   doctorSpecialty: 'Specialty', availableSlots: 'Available Slots', bookSlot: 'Book Slot',
+
+  // Request creation (works in demo and connected modes)
+  newRequest: 'New consultation request', requestTitle: 'Request a consultation',
+  requestPatientName: 'Patient name', requestClinician: 'Clinician', requestDate: 'Date', requestTime: 'Time',
+  requestSubmit: 'Send request', requesting: 'Sending...', requestCancel: 'Cancel',
+  requestLoadingDoctors: 'Loading clinicians...', requestLoadingSlots: 'Loading available times...',
+  requestNoDoctors: 'No clinicians available.', requestNoSlots: 'No free times for this date.',
+  requestFillAll: 'Select a clinician, date and time to continue.',
+  requestFailed: 'Could not create the request.', requestCreated: 'Request created.',
+  requestDemoNote: 'Saved on this device only in demo mode.',
 };

@@ -7,13 +7,16 @@ import {
   SafeAreaView,
   TouchableOpacity,
   RefreshControl,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
-import { teleconsultClient, TeleconsultSession } from '../services/teleconsultClient';
+import { teleconsultClient, TeleconsultSession, TeleconsultDoctor } from '../services/teleconsultClient';
 import { teleconsultCopy as copy } from '../i18n/translations/teleconsult';
 import { useTranslation } from '../i18n';
 import { isDemoActive, onDemoModeChange } from '../services/demoMode';
+import { getActivePersona } from '../services/personas';
 
 const STATUS_COLORS: Record<string, string> = {
   REQUESTED: COLORS.warning,
@@ -38,6 +41,20 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [specialtyFilter, setSpecialtyFilter] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+
+  const [showRequest, setShowRequest] = useState(false);
+  const [requestName, setRequestName] = useState('');
+  const [requestDoctors, setRequestDoctors] = useState<TeleconsultDoctor[]>([]);
+  const [requestDoctorId, setRequestDoctorId] = useState('');
+  const [requestDate, setRequestDate] = useState('');
+  const [requestTime, setRequestTime] = useState('');
+  const [requestSlots, setRequestSlots] = useState<string[]>([]);
+  const [requestError, setRequestError] = useState('');
+  const [requestBusy, setRequestBusy] = useState(false);
+  const [requestLoadingDoctors, setRequestLoadingDoctors] = useState(false);
+  const [requestLoadingSlots, setRequestLoadingSlots] = useState(false);
+  const requestLock = useRef(false);
+  const requestSlotVersion = useRef(0);
 
   const active = useRef(false);
   const createLock = useRef(false);
@@ -108,6 +125,98 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
     }
   };
 
+  const openRequest = () => {
+    setShowRequest(true);
+    setRequestError('');
+    setRequestBusy(false);
+    setRequestName(getActivePersona().name);
+    setRequestDoctorId('');
+    setRequestDate('');
+    setRequestTime('');
+    setRequestSlots([]);
+  };
+
+  useEffect(() => {
+    if (!showRequest) return;
+    const currentMode = modeVersion.current;
+    let cancelled = false;
+    setRequestDoctors([]);
+    setRequestError('');
+    setRequestLoadingDoctors(true);
+    teleconsultClient.listDoctors().then(data => {
+      if (!cancelled && currentMode === modeVersion.current) setRequestDoctors(data);
+    }).catch(e => {
+      if (!cancelled && currentMode === modeVersion.current) setRequestError(e instanceof Error ? e.message : copy.requestFailed);
+    }).finally(() => {
+      if (!cancelled && currentMode === modeVersion.current) setRequestLoadingDoctors(false);
+    });
+    return () => { cancelled = true; };
+  }, [showRequest, isDemo]);
+
+  useEffect(() => {
+    const version = ++requestSlotVersion.current;
+    setRequestTime('');
+    setRequestSlots([]);
+    setRequestLoadingSlots(false);
+    if (!showRequest || !requestDoctorId || !requestDate) return;
+    setRequestLoadingSlots(true);
+    teleconsultClient.getAvailableSlots(requestDoctorId, requestDate).then(slots => {
+      if (version === requestSlotVersion.current) setRequestSlots(slots);
+    }).catch(e => {
+      if (version === requestSlotVersion.current) setRequestError(e instanceof Error ? e.message : copy.requestFailed);
+    }).finally(() => {
+      if (version === requestSlotVersion.current) setRequestLoadingSlots(false);
+    });
+    return () => { requestSlotVersion.current += 1; };
+  }, [showRequest, requestDoctorId, requestDate]);
+
+  const next14Days = Array.from({ length: 14 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() + i);
+    return {
+      date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+      dayName: date.toLocaleDateString('en-IN', { weekday: 'short' }),
+      dayNum: date.getDate(),
+    };
+  });
+
+  const submitRequest = async () => {
+    if (requestLock.current || !active.current) return;
+    const doctor = requestDoctors.find(d => d.id === requestDoctorId);
+    if (!requestName.trim() || !doctor || !requestDate || !requestTime) {
+      setRequestError(copy.requestFillAll);
+      return;
+    }
+    requestLock.current = true;
+    const currentMode = modeVersion.current;
+    setRequestBusy(true);
+    setRequestError('');
+    try {
+      const session = await teleconsultClient.create({
+        patientName: requestName.trim(),
+        patientId: `patient-${getActivePersona().role.toLowerCase()}`,
+        fromFacilityId: doctor.facilityId,
+        doctorId: doctor.id,
+        scheduledTime: `${requestDate}T${requestTime}:00+05:30`,
+      });
+      if (!active.current || currentMode !== modeVersion.current) return;
+      setShowRequest(false);
+      await loadSessions();
+      if (active.current && currentMode === modeVersion.current) {
+        navigation.navigate('TeleconsultJoin', { sessionId: session.id });
+      }
+    } catch (e) {
+      if (active.current && currentMode === modeVersion.current) {
+        setRequestError(e instanceof Error ? e.message : copy.requestFailed);
+      }
+    } finally {
+      if (currentMode === modeVersion.current) {
+        requestLock.current = false;
+        if (active.current) setRequestBusy(false);
+      }
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleDateString('en-IN', { weekday: 'short', day: '2-digit', month: 'short' });
@@ -149,12 +258,15 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
           ))}
         </View>
 
-        {isDemo && <>
-          <Text style={styles.notice}>{copy.demo}</Text>
-          <TouchableOpacity accessibilityRole="button" disabled={creating} style={styles.action} onPress={createDemo}>
-            <Text style={styles.actionText}>{creating ? copy.loading : copy.create}</Text>
+        {isDemo && <Text style={styles.notice}>{copy.demo}</Text>}
+        <TouchableOpacity accessibilityRole="button" disabled={creating} style={styles.action} onPress={openRequest}>
+          <Text style={styles.actionText}>{copy.newRequest}</Text>
+        </TouchableOpacity>
+        {isDemo && (
+          <TouchableOpacity accessibilityRole="button" disabled={creating} style={[styles.action, styles.secondaryAction]} onPress={createDemo}>
+            <Text style={[styles.actionText, styles.secondaryActionText]}>{creating ? copy.loading : copy.create}</Text>
           </TouchableOpacity>
-        </>}
+        )}
 
         {/* Filter Controls */}
         <TouchableOpacity style={styles.filterToggle} onPress={() => setShowFilters(!showFilters)}>
@@ -234,7 +346,7 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
                   <Text style={styles.doctorName}>{session.doctorName}</Text>
                   {!!(session.doctorSpecialty || session.specialty) && <Text style={styles.doctorName}>{session.doctorSpecialty || session.specialty}</Text>}
                   <Text style={styles.time}>
-                    {formatDate(session.scheduledTime)} • {formatTimeStr(session.scheduledTime)}
+                    {formatDate(session.scheduledTime)} â€¢ {formatTimeStr(session.scheduledTime)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -242,6 +354,78 @@ export const TeleconsultListScreen: React.FC<{ navigation: any }> = ({ navigatio
           </View>
         )}
       </ScrollView>
+
+      <Modal visible={showRequest} animationType="slide" transparent={true} onRequestClose={() => { if (!requestBusy) setShowRequest(false); }}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxHeight: '90%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{copy.requestTitle}</Text>
+              <TouchableOpacity disabled={requestBusy} style={styles.modalClose} onPress={() => setShowRequest(false)}>
+                <Text style={styles.modalCloseText}>âœ•</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView contentContainerStyle={styles.requestContent}>
+              {isDemo && <Text style={styles.notice}>{copy.requestDemoNote}</Text>}
+              {!!requestError && <Text accessibilityRole="alert" style={styles.errorText}>{requestError}</Text>}
+
+              <Text style={styles.label}>{copy.requestPatientName}</Text>
+              <TextInput style={styles.input} value={requestName} editable={!requestBusy} onChangeText={setRequestName} placeholder={copy.requestPatientName} />
+
+              <Text style={styles.label}>{copy.requestClinician}</Text>
+              {requestLoadingDoctors && <Text style={styles.noSlots}>{copy.requestLoadingDoctors}</Text>}
+              {!requestLoadingDoctors && !requestDoctors.length && <Text style={styles.noSlots}>{copy.requestNoDoctors}</Text>}
+              <View style={styles.doctorList}>
+                {requestDoctors.map((doc) => (
+                  <TouchableOpacity
+                    key={doc.id}
+                    disabled={requestBusy}
+                    style={[styles.doctorCard, requestDoctorId === doc.id && styles.doctorCardActive]}
+                    onPress={() => { requestSlotVersion.current += 1; setRequestDoctorId(doc.id); setRequestTime(''); setRequestSlots([]); }}
+                  >
+                    <Text style={styles.doctorName}>{doc.name}</Text>
+                    <Text style={styles.doctorSpecialty}>{doc.specialty}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>{copy.requestDate}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.requestDateRow}>
+                {next14Days.map((day) => (
+                  <TouchableOpacity
+                    key={day.date}
+                    disabled={requestBusy}
+                    style={[styles.dayCell, requestDate === day.date && styles.dayCellSelected]}
+                    onPress={() => { requestSlotVersion.current += 1; setRequestDate(day.date); setRequestTime(''); setRequestSlots([]); }}
+                  >
+                    <Text style={[styles.dayName, requestDate === day.date && styles.dayNameSelected]}>{day.dayName}</Text>
+                    <Text style={[styles.dayNum, requestDate === day.date && styles.dayNumSelected]}>{day.dayNum}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              <Text style={styles.label}>{copy.requestTime}</Text>
+              {requestLoadingSlots && <Text style={styles.noSlots}>{copy.requestLoadingSlots}</Text>}
+              {!requestLoadingSlots && requestDate && requestDoctorId && !requestSlots.length && <Text style={styles.noSlots}>{copy.requestNoSlots}</Text>}
+              <View style={styles.timeGrid}>
+                {requestSlots.map((slot) => (
+                  <TouchableOpacity
+                    key={slot}
+                    disabled={requestBusy}
+                    style={[styles.timeSlot, requestTime === slot && styles.timeSlotActive]}
+                    onPress={() => setRequestTime(slot)}
+                  >
+                    <Text style={[styles.timeText, requestTime === slot && styles.timeTextActive]}>{slot}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <TouchableOpacity style={[styles.action, requestBusy && styles.disabled]} disabled={requestBusy} onPress={submitRequest}>
+                <Text style={styles.actionText}>{requestBusy ? copy.requesting : copy.requestSubmit}</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -286,6 +470,36 @@ const styles = StyleSheet.create({
   notice: { backgroundColor: '#EAF3F2', color: '#234B47', padding: 14, borderRadius: 10, lineHeight: 21 },
   action: { backgroundColor: COLORS.primary, borderRadius: 10, padding: 14, alignItems: 'center' },
   actionText: { color: '#fff', fontWeight: '600' },
+  secondaryAction: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.primary },
+  secondaryActionText: { color: COLORS.primary },
+  disabled: { opacity: 0.5 },
+  label: { fontSize: 14, fontWeight: '600', color: COLORS.textPrimary },
+  input: { backgroundColor: COLORS.surface, borderRadius: 8, padding: 12, fontSize: 14, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border },
+  errorText: { color: COLORS.danger, fontSize: 13, lineHeight: 20 },
+  doctorList: { gap: 8 },
+  doctorCard: { backgroundColor: COLORS.surface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: COLORS.border },
+  doctorCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
+  doctorSpecialty: { fontSize: 13, color: COLORS.textSecondary },
+  requestContent: { gap: theme.spacing.md },
+  requestDateRow: { gap: 8, paddingVertical: 4 },
+  dayCell: { width: 56, height: 64, backgroundColor: COLORS.surface, borderRadius: 10, padding: 6, alignItems: 'center', justifyContent: 'center', gap: 4, borderWidth: 1, borderColor: COLORS.border },
+  dayCellSelected: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  dayName: { fontSize: 11, fontWeight: '600', color: COLORS.textSecondary },
+  dayNameSelected: { color: COLORS.textOnPrimary },
+  dayNum: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  dayNumSelected: { color: COLORS.textOnPrimary },
+  timeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  timeSlot: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
+  timeSlotActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  timeText: { fontSize: 13, color: COLORS.textSecondary },
+  timeTextActive: { color: COLORS.textOnPrimary, fontWeight: '600' },
+  noSlots: { color: COLORS.textSecondary, fontSize: 13 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 },
+  modalCard: { backgroundColor: COLORS.surface, borderRadius: 16, padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.textPrimary },
+  modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.background, alignItems: 'center', justifyContent: 'center' },
+  modalCloseText: { fontSize: 18, color: COLORS.textSecondary, fontWeight: '700' },
   filterToggle: { backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 12, alignItems: 'center', marginBottom: theme.spacing.md },
   filterToggleText: { fontSize: 14, fontWeight: '600', color: COLORS.primary },
   filterPanel: { backgroundColor: COLORS.surface, borderRadius: 12, padding: theme.spacing.md, gap: theme.spacing.md, borderWidth: 1, borderColor: COLORS.border },

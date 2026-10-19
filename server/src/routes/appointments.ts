@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
-import { Appointment, QueueEntry, ApiResponse } from '../types/index.js';
+import { z } from 'zod';
+import { Appointment, QueueEntry, ApiResponse, TriageSeverity } from '../types/index.js';
 import {
   createAppointment,
   getAppointment,
@@ -12,12 +13,39 @@ import {
   getAvailableSlots,
   seedDemoAppointments,
 } from '../services/appointmentService.js';
+import { emptyQuery, idParams, idSchema, text, validationErrors } from '../validation.js';
+
+const APPOINTMENT_TYPES = ['OUTPATIENT', 'TELECONSULT', 'DIAGNOSTIC'] as const;
+const APPOINTMENT_STATUSES = ['BOOKED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'] as const;
+const SEVERITIES = ['RED', 'YELLOW', 'GREEN'] as const;
+
+const createBody = z.object({
+  patientId: idSchema,
+  patientName: text(120),
+  facilityId: idSchema,
+  doctorId: idSchema.optional(),
+  dateTime: z.string().trim().min(10).max(40),
+  type: z.enum(APPOINTMENT_TYPES),
+  priority: z.enum(SEVERITIES),
+}).strict();
+
+const statusBody = z.object({ status: z.enum(APPOINTMENT_STATUSES) }).strict();
+
+const listQuery = z.object({
+  facilityId: idSchema.optional(),
+  patientId: idSchema.optional(),
+  doctorId: idSchema.optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict();
+
+const slotsParams = z.object({ facilityId: idSchema, date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).strict();
 
 const appointmentsRoutes: FastifyPluginAsync = async (fastify) => {
+  validationErrors(fastify);
   seedDemoAppointments();
 
   fastify.get<{ Reply: ApiResponse<Appointment[]> }>('/api/appointments', async (request) => {
-    const query = request.query as { facilityId?: string; patientId?: string; doctorId?: string; date?: string };
+    const query = listQuery.parse(request.query);
 
     let appointments: Appointment[];
     if (query.facilityId) {
@@ -34,7 +62,8 @@ const appointmentsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get<{ Reply: ApiResponse<Appointment> }>('/api/appointments/:id', async (request, reply) => {
-    const { id } = request.params as { id: string };
+    emptyQuery.parse(request.query);
+    const { id } = idParams.parse(request.params);
     const appointment = getAppointment(id);
 
     if (!appointment) {
@@ -45,54 +74,24 @@ const appointmentsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post<{
-    Body: {
-      patientId: string;
-      patientName: string;
-      facilityId: string;
-      doctorId?: string;
-      dateTime: string;
-      type: string;
-      priority: string;
-    };
     Reply: ApiResponse<Appointment>;
-  }>('/api/appointments', async (request, reply) => {
-    const body = request.body as {
-      patientId: string;
-      patientName: string;
-      facilityId: string;
-      doctorId?: string;
-      dateTime: string;
-      type: string;
-      priority: string;
-    };
+  }>('/api/appointments', { bodyLimit: 16384 }, async (request, reply) => {
+    emptyQuery.parse(request.query);
+    const body = createBody.parse(request.body);
 
-    const appointment = createAppointment({
-      patientId: body.patientId,
-      patientName: body.patientName,
-      facilityId: body.facilityId,
-      doctorId: body.doctorId,
-      dateTime: body.dateTime,
-      type: body.type as any,
-      priority: body.priority as any,
-    });
+    const appointment = createAppointment({ ...body, priority: body.priority as TriageSeverity });
 
     return reply.code(201).send({ success: true, data: appointment });
   });
 
   fastify.patch<{
-    Params: { id: string };
-    Body: { status: string };
     Reply: ApiResponse<Appointment>;
   }>('/api/appointments/:id/status', async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { status } = request.body as { status: string };
+    emptyQuery.parse(request.query);
+    const { id } = idParams.parse(request.params);
+    const { status } = statusBody.parse(request.body);
 
-    const validStatuses = ['BOOKED', 'CHECKED_IN', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'NO_SHOW'];
-    if (!validStatuses.includes(status)) {
-      return reply.status(400).send({ success: false, error: 'Invalid status' });
-    }
-
-    const appointment = updateAppointmentStatus(id, status as any);
+    const appointment = updateAppointmentStatus(id, status);
     if (!appointment) {
       return reply.status(404).send({ success: false, error: 'Appointment not found or invalid status transition' });
     }
@@ -101,20 +100,19 @@ const appointmentsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get<{
-    Params: { facilityId: string };
     Reply: ApiResponse<QueueEntry[]>;
   }>('/api/appointments/queue/:facilityId', async (request) => {
-    const { facilityId } = request.params as { facilityId: string };
+    emptyQuery.parse(request.query);
+    const { facilityId } = z.object({ facilityId: idSchema }).strict().parse(request.params);
     const queue = getQueue(facilityId);
     return { success: true, data: queue };
   });
 
   fastify.get<{
-    Params: { facilityId: string; date: string };
     Reply: ApiResponse<{ slots: string[] }>;
   }>('/api/appointments/slots/:facilityId/:date', async (request) => {
-    const { facilityId, date } = request.params as { facilityId: string; date: string };
-    const doctorId = (request.query as { doctorId?: string })?.doctorId;
+    const { facilityId, date } = slotsParams.parse(request.params);
+    const doctorId = z.object({ doctorId: idSchema.optional() }).strict().parse(request.query).doctorId;
     const slots = getAvailableSlots(facilityId, date, doctorId);
     return { success: true, data: { slots } };
   });
