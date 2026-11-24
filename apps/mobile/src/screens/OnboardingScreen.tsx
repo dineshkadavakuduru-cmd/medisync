@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, NativeScrollEvent, NativeSyntheticEvent } from 'react-native';
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,19 +10,19 @@ const SLIDES = [
     icon: '🏥',
     titleKey: 'onboarding.unifiedHealthcare',
     descriptionKey: 'onboarding.unifiedHealthcareDesc',
-    gradient: ['#E0F2F1', '#00695C'],
+    tint: '#E0F2F1',
   },
   {
     icon: '🤖',
     titleKey: 'onboarding.aiTriage',
     descriptionKey: 'onboarding.aiTriageDesc',
-    gradient: ['#E3F2FD', '#1565C0'],
+    tint: '#E3F2FD',
   },
   {
     icon: '🚨',
     titleKey: 'onboarding.emergencyResponse',
     descriptionKey: 'onboarding.emergencyResponseDesc',
-    gradient: ['#FFEBEE', '#C62828'],
+    tint: '#FFEBEE',
   },
 ];
 
@@ -31,15 +31,24 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [width, setWidth] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const slideIndex = useRef(0);
+  const web = Platform.OS === 'web';
+  const wide = web && width >= 760;
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ x: currentIndex * width, animated: false });
+    scrollRef.current?.scrollTo({ x: slideIndex.current * width, animated: false });
   }, [width]);
+
+  const showSlide = (index: number) => {
+    const next = Math.max(0, Math.min(index, SLIDES.length - 1));
+    slideIndex.current = next;
+    setCurrentIndex(next);
+  };
 
   const handleNext = () => {
     if (currentIndex < SLIDES.length - 1) {
-      scrollRef.current?.scrollTo({ x: (currentIndex + 1) * width, animated: true });
-      setCurrentIndex(currentIndex + 1);
+      scrollRef.current?.scrollTo({ x: (currentIndex + 1) * width, animated: !web });
+      showSlide(currentIndex + 1);
     } else {
       completeOnboarding();
     }
@@ -54,24 +63,26 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
     navigation.replace('MainTabs');
   };
 
-  const skip = async () => {
-    try {
-      await AsyncStorage.setItem('onboarding_completed', 'true');
-    } catch (e) {
-      console.error(e);
-    }
-    navigation.replace('MainTabs');
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!width) return;
+    showSlide(Math.round(event.nativeEvent.contentOffset.x / width));
   };
 
-  const handleScroll = (event: any) => {
-    if (!width) return;
-    const index = Math.round(event.nativeEvent.contentOffset.x / width);
-    setCurrentIndex(index);
-  };
+  const renderSlide = (slide: typeof SLIDES[number]) => (
+    <>
+      <View aria-hidden style={[styles.art, { backgroundColor: slide.tint }, wide && styles.wideArt]}>
+        <Text style={styles.icon}>{slide.icon}</Text>
+      </View>
+      <View style={[styles.copy, wide && styles.wideCopy]}>
+        <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={[styles.title, wide && styles.leftAligned]}>{t(slide.titleKey)}</Text>
+        <Text style={[styles.description, wide && styles.leftAligned]}>{t(slide.descriptionKey)}</Text>
+      </View>
+    </>
+  );
 
   return (
     <View style={styles.container} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
-      <TouchableOpacity style={styles.skip} onPress={skip}>
+      <TouchableOpacity accessibilityRole="button" style={styles.skip} onPress={completeOnboarding}>
         <Text style={styles.skipText}>{t('onboarding.skip')}</Text>
       </TouchableOpacity>
 
@@ -80,26 +91,31 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
+        onScroll={web ? handleScroll : undefined}
+        scrollEventThrottle={16}
         onMomentumScrollEnd={handleScroll}
         contentContainerStyle={styles.scrollContent}
       >
         {width > 0 && SLIDES.map((slide, index) => (
-          <View key={index} style={[styles.slide, { width }]}>
-            <Text style={styles.icon}>{slide.icon}</Text>
-            <Text style={styles.title}>{t(slide.titleKey)}</Text>
-            <Text style={styles.description}>{t(slide.descriptionKey)}</Text>
-            <View style={[styles.gradient, { backgroundColor: slide.gradient[0] }]} />
+          <View key={slide.titleKey} style={{ width }} aria-hidden={index !== currentIndex}>
+            {web ? (
+              <ScrollView contentContainerStyle={[styles.slide, styles.webSlide, wide && styles.wideSlide]}>
+                {renderSlide(slide)}
+              </ScrollView>
+            ) : (
+              <View style={[styles.slide, styles.nativeSlide]}>{renderSlide(slide)}</View>
+            )}
           </View>
         ))}
       </ScrollView>
 
-      <View style={styles.dots}>
+      <View style={styles.dots} aria-hidden>
         {SLIDES.map((_, index) => (
           <View key={index} style={[styles.dot, currentIndex === index && styles.dotActive]} />
         ))}
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleNext}>
+      <TouchableOpacity accessibilityRole="button" style={[styles.button, wide && styles.wideButton]} onPress={handleNext}>
         <Text style={styles.buttonText}>
           {currentIndex === SLIDES.length - 1 ? `${t('onboarding.getStarted')} →` : `${t('onboarding.next')} →`}
         </Text>
@@ -114,10 +130,11 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.surface,
   },
   skip: {
-    position: 'absolute',
-    top: theme.spacing.lg,
-    right: theme.layout.screenPadding,
-    zIndex: 10,
+    alignSelf: 'flex-end',
+    marginHorizontal: theme.layout.screenPadding,
+    paddingHorizontal: theme.spacing.md,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   skipText: {
     color: COLORS.textSecondary,
@@ -132,11 +149,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: theme.layout.screenPadding,
+    gap: theme.spacing.lg,
   },
-  icon: {
-    fontSize: 80,
-    marginBottom: theme.spacing.xl,
-  },
+  webSlide: { flexGrow: 1, paddingVertical: theme.spacing.md },
+  nativeSlide: { flex: 1 },
+  wideSlide: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 48, gap: 40 },
+  art: { width: 144, height: 144, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: theme.spacing.sm },
+  wideArt: { flex: 1, minHeight: 220 },
+  icon: { fontSize: 72 },
+  copy: { maxWidth: 440 },
+  wideCopy: { flex: 1, minWidth: 0 },
+  leftAligned: { textAlign: 'left' },
   title: {
     fontSize: theme.typography.fontSize['3xl'],
     fontWeight: theme.typography.fontWeight.bold,
@@ -149,15 +172,6 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     textAlign: 'center',
     lineHeight: 24,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-    opacity: 0.3,
   },
   dots: {
     flexDirection: 'row',
@@ -177,12 +191,13 @@ const styles = StyleSheet.create({
   },
   button: {
     marginHorizontal: theme.layout.screenPadding,
-    marginBottom: theme.layout.tabBarHeight + theme.spacing.lg,
+    marginBottom: theme.spacing.lg,
     backgroundColor: COLORS.primary,
     paddingVertical: theme.spacing.lg,
     borderRadius: theme.borderRadius.md,
     alignItems: 'center',
   },
+  wideButton: { alignSelf: 'center', minWidth: 240, paddingHorizontal: theme.spacing.xl },
   buttonText: {
     color: COLORS.textOnPrimary,
     fontSize: theme.typography.fontSize.lg,

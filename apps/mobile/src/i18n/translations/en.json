@@ -146,6 +146,7 @@
     "staffOnDuty": "Staff On Duty",
     "all": "All",
     "bedsAvailable": "beds available",
+    "medicineAvailability": "medicine availability",
     "itemsCritical": "items critical",
     "onDuty": "on duty",
     "viewDetails": "View Details",
@@ -203,6 +204,7 @@
     "description": "More care tools. Home visits and inventory appear for the appropriate demo role."
   },
   "navigation": {
+    "main": "Main navigation",
     "patientDetail": "Patient Details",
     "facilityDetail": "Facility Details",
     "referralStatus": "Referral Status",

@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   FlatList,
   Animated,
+  Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { COLORS, FacilityType } from '@medisync/shared';
@@ -47,6 +49,8 @@ const FACILITY_TYPE_LABELS: Record<FacilityType, string> = {
 
 export const FacilityScreen: React.FC = () => {
   const { t } = useTranslation();
+  const { width } = useWindowDimensions();
+  const columns = Platform.OS === 'web' && width >= 800 ? 2 : 1;
   const navigation = useNavigation<any>();
   const [demoMode, setDemoMode] = useState(isDemoActive);
   const [facilities, setFacilities] = useState<Facility[]>([]);
@@ -143,16 +147,16 @@ export const FacilityScreen: React.FC = () => {
     const hasCritical = item.medicineAvailability < 60;
 
     return (
-      <TouchableOpacity
-        onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id, ...(demoMode ? { facility: item, facilitySource: 'sample' } : {}) })}
+      <View
         style={[
           styles.card,
+          columns > 1 && styles.gridCard,
           hasCritical && { borderTopColor: COLORS.severityRed, borderTopWidth: 3 },
           highlightedId === item.id && { backgroundColor: COLORS.primaryLight },
         ]}
       >
         <View style={styles.cardHeader}>
-          <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.cardName}>{item.name}</Text>
           <View style={[styles.typeBadge, { backgroundColor: `${FACILITY_TYPE_COLORS[item.type]}20` }]}>
             <Text style={[styles.typeBadgeText, { color: FACILITY_TYPE_COLORS[item.type] }]}>
               {FACILITY_TYPE_LABELS[item.type]}
@@ -170,7 +174,7 @@ export const FacilityScreen: React.FC = () => {
 
         <View style={styles.meterRow}>
           <MaterialCommunityIcons name="pill" size={18} color={COLORS.primary} style={styles.meterIcon} />
-          <Text style={styles.meterLabel}>{item.medicineAvailability}% {t('facility.medicineAvailability') || 'stock'}</Text>
+          <Text style={styles.meterLabel}>{item.medicineAvailability}% {t('facility.medicineAvailability', 'medicine availability')}</Text>
           <View style={styles.meterBarBg}>
             <View style={[styles.meterBar, { width: `${item.medicineAvailability}%`, backgroundColor: medColor }]} />
           </View>
@@ -197,18 +201,22 @@ export const FacilityScreen: React.FC = () => {
             <MaterialCommunityIcons name="phone-outline" size={16} color={COLORS.primary} style={styles.phoneIcon} />
             <Text style={styles.phoneText}>{item.contactPhone}</Text>
           </View>
-          <TouchableOpacity accessibilityRole="button" onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id, ...(demoMode ? { facility: item, facilitySource: 'sample' } : {}) })}>
-            <Text style={styles.detailsLink}>{t('facility.viewDetails')} →</Text>
-          </TouchableOpacity>
+          <Text style={styles.detailsLink}>{t('facility.viewDetails')} →</Text>
         </View>
-      </TouchableOpacity>
+        <TouchableOpacity
+          accessibilityRole="button"
+          accessibilityLabel={`${t('facility.viewDetails')}: ${item.name}`}
+          style={styles.cardAction}
+          onPress={() => navigation.navigate('FacilityDetail', { facilityId: item.id, ...(demoMode ? { facility: item, facilitySource: 'sample' } : {}) })}
+        />
+      </View>
     );
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
+  const header = (
+    <>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{t('facility.title')}</Text>
+        <Text accessibilityRole="header" style={styles.headerTitle}>{t('facility.title')}</Text>
         {demoMode && <Text style={styles.demoNotice}>DEMO MODE: Synthetic facility snapshots, not live availability. No server connection or live edits.</Text>}
       </View>
 
@@ -225,6 +233,8 @@ export const FacilityScreen: React.FC = () => {
             return (
               <TouchableOpacity
                 key={type}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
                 style={[styles.filterChip, isActive && styles.filterChipActive]}
                 onPress={() => setFilterType(type)}
                 activeOpacity={0.8}
@@ -237,12 +247,21 @@ export const FacilityScreen: React.FC = () => {
           })}
         </ScrollView>
       </View>
+    </>
+  );
 
+  return (
+    <SafeAreaView style={styles.container}>
       <FlatList
+        key={columns}
+        numColumns={columns}
+        columnWrapperStyle={columns > 1 ? styles.gridRow : undefined}
         data={filtered}
         keyExtractor={(item) => item.id}
         renderItem={renderFacilityCard}
         contentContainerStyle={styles.listContent}
+        ListHeaderComponent={header}
+        ListHeaderComponentStyle={styles.listHeader}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={<EmptyState />}
       />
@@ -266,7 +285,6 @@ const styles = StyleSheet.create({
   filterWrapper: {
     minWidth: 0,
     maxWidth: '100%',
-    marginBottom: 12,
   },
   filterScrollContent: {
     paddingHorizontal: 16,
@@ -306,9 +324,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 16,
-    paddingBottom: 90,
+    paddingBottom: 16,
     gap: 14,
   },
+  listHeader: { marginHorizontal: -16 },
+  gridRow: { gap: 14 },
+  gridCard: { flexGrow: 0, flexShrink: 1, flexBasis: '50%', minWidth: 0 },
+  cardAction: { ...StyleSheet.absoluteFillObject, borderRadius: 14 },
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 14,

@@ -109,11 +109,11 @@ test('finalization: rebuilt no-API browser journeys', { timeout: 300000 }, async
           return problems;
         });
         assert.deepEqual(overflow, [], `${stage}: horizontal overflow`);
-        const frameWidth = Math.min(width, 520);
+        const frameWidth = Math.min(width, 960);
         const sos = await page.getByTestId('global-sos').boundingBox();
         assert.ok(sos && sos.x >= (width - frameWidth) / 2 - 1 && sos.x + sos.width <= (width + frameWidth) / 2 + 1 && sos.y + sos.height <= 813, 'Global SOS remains in frame');
         if (navigation) {
-          assert.equal(await page.getByRole('tab').count(), 5);
+          assert.equal(await page.getByRole('navigation').getByRole('button').count(), 5);
           const boxes = [];
           for (const name of tabs) {
             assert.equal(await tab(name).getAttribute('aria-label'), translations[language].common[name]);
@@ -219,12 +219,12 @@ test('finalization: rebuilt no-API browser journeys', { timeout: 300000 }, async
           await step(`${language}: UI language persists across browser process restart`, async () => {
             await home();
             await text(label).click();
-            await page.getByRole('tab', { name: translations[language].common.home, exact: true }).waitFor();
+            await page.getByRole('navigation').getByRole('button', { name: translations[language].common.home, exact: true }).waitFor();
             await check(true, language);
             await context.close();
             await start();
             await home();
-            await page.getByRole('tab', { name: translations[language].common.home, exact: true }).waitFor();
+            await page.getByRole('navigation').getByRole('button', { name: translations[language].common.home, exact: true }).waitFor();
             await check(true, language);
             await tab('patients').click();
             await text(patientJourney[language].demoSource).waitFor();
@@ -248,7 +248,7 @@ test('finalization: rebuilt no-API browser journeys', { timeout: 300000 }, async
             await check(true, language);
             await tab('home').click();
             await text('EN').click();
-            await page.getByRole('tab', { name: 'Home', exact: true }).waitFor();
+            await page.getByRole('navigation').getByRole('button', { name: 'Home', exact: true }).waitFor();
           });
         }
         await step('More Diagnostics renders unavailable; role-specific entries react without reload', async () => {
@@ -279,7 +279,7 @@ test('finalization: rebuilt no-API browser journeys', { timeout: 300000 }, async
         await step('Facility synthetic forecast: four horizons, local method, disclaimers, retry and close', async () => {
           await home();
           await tab('facility').click();
-          await text('Mulshi PHC').click();
+          await page.getByRole('button', { name: 'View Details: Mulshi PHC', exact: true }).click();
           await text('DEMO MODE: Synthetic selected facility').waitFor();
           await text('Mulshi PHC').waitFor();
           const disclaimer = 'Experimental synthetic/demo method, not clinically validated. Do not use for clinical decisions or automatic bed allocation.';

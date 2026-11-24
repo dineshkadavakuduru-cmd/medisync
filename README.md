@@ -89,8 +89,20 @@ Web app runs on http://localhost:3000
 
 ### Deploy the Bottom-Tab App to Vercel
 
-The phone-style MediSync UI is `apps/mobile`, not the separate Next.js district
-dashboard in `apps/web`. For the phone-style production site, use:
+Both public MediSync demos serve the same Expo web export from `apps/mobile`.
+The Next.js district dashboard in `apps/web` has its own build.
+
+| Vercel project | Production alias | Preview role |
+| --- | --- | --- |
+| `medisync` | [MediSync web demo](https://medisync-rose-one.vercel.app/) | Check desktop onboarding, Facility, keyboard navigation, and zoom reflow on this project's branch deployment. |
+| `medisync-mobile--7` | [MediSync mobile demo](https://medisync-mobile-7.vercel.app/) | Check 360px and 390px touch flows, safe areas, and persistent navigation on this project's branch deployment. |
+
+Review both projects' unique Vercel preview URLs from the same branch commit
+before releasing to their stable production aliases. Use only synthetic records
+and leave the API and ML endpoints unset in demo previews. Stop SOS verification
+at the condition picker.
+
+Use these build settings for both projects.
 
 - Root Directory: repository root (leave blank, not `apps/web`).
 - Framework Preset: Other.

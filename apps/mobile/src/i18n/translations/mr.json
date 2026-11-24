@@ -145,6 +145,7 @@
     "staffOnDuty": "ड्यूटीवर कर्मचारी",
     "all": "सर्व",
     "bedsAvailable": "बेड उपलब्ध",
+    "medicineAvailability": "औषधांची उपलब्धता",
     "itemsCritical": "गंभीर घटक",
     "onDuty": "ड्यूटीवर",
     "viewDetails": "तपशील पहा",
@@ -202,6 +203,7 @@
     "description": "इतर आरोग्य साधने. घरभेट आणि साठा संबंधित डेमो भूमिकेसाठी दिसतात."
   },
   "navigation": {
+    "main": "मुख्य नेव्हिगेशन",
     "patientDetail": "रुग्णाचा तपशील",
     "facilityDetail": "सुविधेचा तपशील",
     "referralStatus": "रेफरलची स्थिती",

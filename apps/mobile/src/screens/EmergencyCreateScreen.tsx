@@ -13,6 +13,7 @@ import {
 import { COLORS } from '@medisync/shared';
 import { theme } from '../styles/theme';
 import { api } from '../services/api';
+import { isDemoActive } from '../services/demoMode';
 import { useTranslation } from '../i18n';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -61,6 +62,7 @@ interface EmergencyCreateScreenProps {
 
 export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ navigation, route }) => {
   const { t } = useTranslation();
+  const sosExplanation = t(isDemoActive() ? 'onboarding.emergencyResponseDesc' : 'emergency.sosHint');
   const [step, setStep] = useState<'condition' | 'details' | 'activated'>('condition');
   const [selectedCondition, setSelectedCondition] = useState<ConditionOption | null>(null);
   const [patientName, setPatientName] = useState('');
@@ -197,6 +199,7 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
           </View>
 
           <View style={styles.formSection}>
+            <Text style={styles.subtitle}>{sosExplanation}</Text>
             <Text style={styles.formLabel}>{t('emergency.selectCondition')}</Text>
             <TextInput
               style={styles.input}
@@ -256,13 +259,14 @@ export const EmergencyCreateScreen: React.FC<EmergencyCreateScreenProps> = ({ na
     <SafeAreaView style={styles.container}>
       <Animated.View style={[styles.flashOverlay, { opacity: flashAnim }]} pointerEvents="none" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>{t('emergency.selectCondition')}</Text>
-        <Text style={styles.subtitle}>{t('emergency.selectCondition')}</Text>
+        <Text accessibilityRole="header" style={styles.title}>{t('emergency.selectCondition')}</Text>
+        <Text style={styles.subtitle}>{sosExplanation}</Text>
 
         <View style={styles.conditionsGrid}>
           {CONDITIONS.map((condition) => (
             <TouchableOpacity
               key={condition.key}
+              accessibilityRole="button"
               style={[styles.conditionCard, { borderColor: LEVEL_COLORS[condition.level] }]}
               onPress={() => handleConditionSelect(condition)}
               activeOpacity={0.8}

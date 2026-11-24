@@ -5,7 +5,7 @@ import { Provider as PaperProvider } from 'react-native-paper';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import { NetworkBanner } from './src/components/NetworkBanner';
-import { loadSavedLanguage } from './src/i18n';
+import { loadSavedLanguage, useTranslation } from './src/i18n';
 import { initDemoMode } from './src/services/demoMode';
 
 const theme = {
@@ -21,6 +21,11 @@ const theme = {
 
 export default function App() {
   const [ready, setReady] = useState(false);
+  const { language } = useTranslation();
+  useEffect(() => {
+    if (Platform.OS === 'web') document.documentElement.lang = language;
+  }, [language]);
+
   useEffect(() => {
     let mounted = true;
     void Promise.all([loadSavedLanguage(), initDemoMode()]).then(() => {
@@ -58,7 +63,7 @@ const styles = StyleSheet.create({
   appShell: {
     flex: 1,
     width: '100%',
-    maxWidth: Platform.OS === 'web' ? 520 : undefined,
+    maxWidth: Platform.OS === 'web' ? 960 : undefined,
     backgroundColor: '#F5F5F5',
     overflow: 'hidden',
     shadowColor: '#000',

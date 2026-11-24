@@ -225,7 +225,7 @@ function screen(options = {}) {
   const module = load(options.list ? 'FacilityScreen.tsx' : 'FacilityDetailScreen.tsx', {
     react: hooks,
     'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) },
-    'react-native': new Proxy({ StyleSheet: { create: value => value }, Animated: { Value: class {}, sequence: () => ({ start() {} }), timing() {} } }, { get: (obj, key) => obj[key] ?? key }),
+    'react-native': new Proxy({ useWindowDimensions: () => ({ width: 390 }), StyleSheet: { create: value => value, absoluteFillObject: {} }, Animated: { Value: class {}, sequence: () => ({ start() {} }), timing() {} } }, { get: (obj, key) => obj[key] ?? key }),
     '@expo/vector-icons': { MaterialCommunityIcons: 'Icon' },
     '@react-navigation/native': { useRoute: () => ({ params: { facilityId: state.facilityId, facility: state.routeFacility, facilitySource: state.facilitySource } }), useNavigation: () => ({ goBack() {}, navigate: (...args) => state.navigation.push(args) }) },
     '@medisync/shared': { COLORS: {}, FacilityType: { SUB_CENTRE: 'SUB_CENTRE', PHC: 'PHC', CHC: 'CHC', DISTRICT_HOSPITAL: 'DISTRICT_HOSPITAL' } },
@@ -233,7 +233,7 @@ function screen(options = {}) {
     '../services/api': { MOCK_FACILITIES: facilities, api: { getFacilities: () => apiResponse(facilities), getFacilitySummary: () => apiResponse(summary()), getFacilityInventory: () => apiResponse([]), getFacilityStaff: () => apiResponse([]), updateMedicineStock: () => { assert.fail('No demo writes'); } } },
     '../services/websocket': { wsClient: { connect() { state.sockets++; return () => { state.releases++; }; }, on() { return () => {}; } } },
     '../services/demoMode': { isDemoActive: () => state.demo, onDemoModeChange(fn) { modeListeners.add(fn); return () => modeListeners.delete(fn); } },
-    '../i18n': { useTranslation: () => ({ language: state.language, t: key => key }) },
+    '../i18n': { useTranslation: () => ({ language: state.language, t: (key, fallback = key) => fallback }) },
     './bedForecastI18n': i18n,
     '../services/bedForecast': { ...service, fetchBedForecast: async (input, options) => {
       state.calls.push({ input, options });
@@ -248,7 +248,10 @@ function screen(options = {}) {
     if (Array.isArray(node)) return node.map(expand);
     if (!node || typeof node !== 'object') return node;
     if (typeof node.type === 'function') return expand(node.type(node.props));
-    if (node.type === 'FlatList') return { ...node, props: { ...node.props, children: node.props.data.length ? node.props.data.map(item => expand(node.props.renderItem({ item }))) : expand(node.props.ListEmptyComponent) } };
+    if (node.type === 'FlatList') {
+      const rows = node.props.data.length ? node.props.data.map(item => expand(node.props.renderItem({ item }))) : expand(node.props.ListEmptyComponent);
+      return { ...node, props: { ...node.props, children: [expand(node.props.ListHeaderComponent), rows] } };
+    }
     return { ...node, props: { ...node.props, children: expand(node.props?.children) } };
   };
   const render = () => { cursor = 0; tree = expand(Component()); };
@@ -420,8 +423,8 @@ test('demo facility list is labelled, network-free and details link carries sele
     assert.equal(view.state.apiCalls, 0);
     assert.equal(view.state.sockets, 0);
     assert.match(view.text(), /DEMO MODE/);
-    // The nested details control itself must navigate, not rely on parent bubbling.
-    const links = view.nodes().filter(node => node.type === 'TouchableOpacity' && node.props.children?.type === 'Text' && node.props.children.props.children?.[0] === 'facility.viewDetails');
+    assert.match(view.text(), /medicine availability/);
+    const links = view.nodes().filter(node => node.type === 'TouchableOpacity' && node.props.accessibilityLabel?.startsWith('facility.viewDetails:'));
     assert.equal(links.length, 2);
     links[1].props.onPress();
     assert.equal(view.state.navigation[0][0], 'FacilityDetail');

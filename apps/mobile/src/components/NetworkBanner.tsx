@@ -112,7 +112,7 @@ export const NetworkBanner: React.FC = () => {
   };
 
   const hasError = storageError || status.error || status.failed > 0;
-  const showSync = unconfigured || !ready || !status.online || status.syncing || status.pending > 0 || hasError;
+  const showSync = isDemo || unconfigured || !ready || !status.online || status.syncing || status.pending > 0 || hasError;
   const retryDisabled = retrying || status.syncing || (!status.online && !storageError) || ((isDemo || unconfigured) && !storageError);
   if (!isDemo && !showSync) return null;
 

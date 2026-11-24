@@ -88,7 +88,8 @@ test('stabilization: missing backend and local teleconsult browser flows', { tim
           socket.close();
         });
         const text = value => page.getByText(value, { exact: true });
-        const tab = name => page.getByRole('tab', { name, exact: true });
+        const nav = page.getByRole('navigation');
+        const tab = name => nav.getByRole('button', { name, exact: true });
         const check = async name => {
           stage = name;
           await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -123,7 +124,7 @@ test('stabilization: missing backend and local teleconsult browser flows', { tim
           await tab('More').click();
           await page.getByTestId(`more-${expectedTool}`).waitFor();
           assert.equal(await page.getByTestId(`more-${absentTool}`).count(), 0, `${role}: previous role-only tool removed without reload`);
-          assert.equal(await page.getByRole('tab').count(), 5);
+          assert.equal(await nav.getByRole('button').count(), 5);
           await check(`${role} reactive profile switch`);
         };
         try {
@@ -132,7 +133,7 @@ test('stabilization: missing backend and local teleconsult browser flows', { tim
           await check('onboarding');
           await text('Skip').click();
           await text('Queue Management').waitFor();
-          assert.equal(await page.getByRole('tab').count(), 5);
+          assert.equal(await nav.getByRole('button').count(), 5);
           await page.getByTestId('global-sos').waitFor();
           assert.equal(await tab('Inventory').count(), 0);
           assert.equal(await tab('Home Visit').count(), 0);

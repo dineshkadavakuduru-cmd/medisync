@@ -145,6 +145,7 @@
     "staffOnDuty": "ड्यूटी पर स्टाफ",
     "all": "सभी",
     "bedsAvailable": "बिस्तर उपलब्ध",
+    "medicineAvailability": "दवाओं की उपलब्धता",
     "itemsCritical": "आइटम गंभीर",
     "onDuty": "ड्यूटी पर",
     "viewDetails": "विवरण देखें",
@@ -202,6 +203,7 @@
     "description": "अन्य देखभाल साधन। होम विजिट और इन्वेंटरी संबंधित डेमो भूमिका के लिए दिखते हैं।"
   },
   "navigation": {
+    "main": "मुख्य नेविगेशन",
     "patientDetail": "मरीज़ का विवरण",
     "facilityDetail": "सुविधा का विवरण",
     "referralStatus": "रेफरल की स्थिति",

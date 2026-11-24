@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { BottomTabBarProps, createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { COLORS } from '@medisync/shared';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -30,7 +30,7 @@ const TAB_ICONS: Record<string, IconName> = {
 };
 
 const TabIcon: React.FC<TabIconProps> = ({ focused, routeName, label }) => {
-  const color = focused ? COLORS.primary : '#8E8E93';
+  const color = focused ? COLORS.primary : COLORS.textSecondary;
   const iconName = TAB_ICONS[routeName] || 'circle-outline';
 
   return (
@@ -45,20 +45,27 @@ const TabIcon: React.FC<TabIconProps> = ({ focused, routeName, label }) => {
 
 const FixedTabBar: React.FC<BottomTabBarProps> = ({ state, descriptors, navigation }) => {
   const { t } = useTranslation();
+  const web = Platform.OS === 'web';
 
   return (
-    <View style={styles.tabBar}>
+    <View
+      role={web ? 'navigation' : undefined}
+      accessibilityLabel={web ? t('navigation.main') : undefined}
+      testID="bottom-navigation"
+      style={styles.tabBar}
+    >
         {state.routes.map((route, index) => {
           const focused = state.index === index;
           const options = descriptors[route.key].options;
           return (
             <TouchableOpacity
               key={route.key}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: focused }}
+              accessibilityRole={web ? 'button' : 'tab'}
+              accessibilityState={web ? undefined : { selected: focused }}
+              {...(web && focused ? { 'aria-current': 'page' } : {})}
               accessibilityLabel={options.tabBarAccessibilityLabel || t(`common.${route.name.toLowerCase()}`)}
               testID={options.tabBarTestID || `tab-${route.name.toLowerCase()}`}
-              style={styles.tabItem}
+              style={[styles.tabItem, focused && styles.currentTab]}
               onPress={() => {
                 const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
                 if (!focused && !event.defaultPrevented) navigation.navigate(route.name, route.params);
@@ -107,6 +114,7 @@ const styles = StyleSheet.create({
     minHeight: 62,
     ...theme.shadows.lg,
   },
+  currentTab: { backgroundColor: COLORS.primaryLight },
   iconContainer: {
     alignItems: 'center',
     justifyContent: 'center',

@@ -12,18 +12,18 @@ const translations: Record<Language, TranslationKeys> = { en, hi, mr };
 let currentLanguage: Language = 'en';
 const listeners: (() => void)[] = [];
 
-export function t(path: string): string {
+export function t(path: string, fallback = path): string {
   const keys = path.split('.');
-  let result: any = translations[currentLanguage];
-  for (const key of keys) {
-    result = result?.[key];
-    if (result === undefined) {
-      result = translations['en'];
-      for (const k of keys) result = result?.[k];
-      return result || path;
+  const lookup = (dictionary: TranslationKeys) => {
+    let value: unknown = dictionary;
+    for (const key of keys) {
+      value = value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, key)
+        ? (value as Record<string, unknown>)[key]
+        : undefined;
     }
-  }
-  return result;
+    return typeof value === 'string' && value.trim() ? value : undefined;
+  };
+  return lookup(translations[currentLanguage]) ?? lookup(translations.en) ?? fallback;
 }
 
 export function getCurrentLanguage(): Language {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NavigationContainer, createNavigationContainerRef, ParamListBase } from '@react-navigation/native';
 import { COLORS } from '@medisync/shared';
@@ -95,7 +95,7 @@ export const AppNavigator: React.FC = () => {
         />
       </Stack.Navigator>
       {showSos && (
-        <SafeAreaView edges={['bottom', 'left', 'right']} style={styles.sosRow}>
+        <SafeAreaView edges={Platform.OS === 'web' ? [] : ['bottom', 'left', 'right']} style={styles.sosRow}>
           <Text style={styles.sosHint}>{t('emergency.sosHint')}</Text>
           <TouchableOpacity
             testID="global-sos"
